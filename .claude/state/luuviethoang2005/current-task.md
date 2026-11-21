@@ -1,109 +1,107 @@
 ---
-task: T3.1 payment: khung, payment order, payOS
+task: T3.2 rental: khung, lịch xem, saga luồng thành công
 created: 2026-11-21
 status: done
-phase: implementation/PHASE-3.md#T3.1
-branch: feature/T3.1-payment-order (từ `develop` tại `d253f01`; T2.5 chưa merge, T3.1 không phụ thuộc T2.5)
+phase: implementation/PHASE-3.md#T3.2
+branch: feature/T3.2-rental-saga (từ `develop` tại `e231b32`, sau khi T2.5 #25 và T3.1 #26 đã merge)
 ---
 
 ## Mô tả
 
-Tạo `services/payment` từ `_template-nest` (cổng 3004, `payment_db`), migration theo `RE.PAYMENT/API_Spec.md §6` và `RE.PAYOUT/API_Spec.md §7`, `PayosClient` (timeout, không retry tạo link), `PaymentOrderService` (tạo, hủy, tra cứu) và controller nội bộ `/internal/payment-orders`. Người làm: A (Claude làm khi A vắng, quyết định 2026-11-21 trong `decisions-log.md`). Hạn M2 — 2026-12-04, ước ~10 giờ.
+Tạo `services/rental` từ template (cổng 3003, `rental_db`, Redis, queue `rental.payment-events`); migration `deposits`, `saga_log`, `viewings`; `ViewingService` + 5 route (`RE.VIEWING`); `ListingLock`, `ListingClient`, `PaymentClient`; `DepositSagaService.start` luồng thành công và `POST /deposits` với `@Idempotent()`; `PaymentEventsHandler` cho `payment.deposited` (kèm tự hủy yêu cầu xem `REQUESTED` của người khác). Người làm: A (Claude làm khi A vắng, quyền A trao 2026-11-21). Hạn M2 — 2026-12-04, ước ~16 giờ.
 
 ## Thiết kế liên quan
 
-`design/PAYMENT/RE.PAYMENT/` v1.1 (`API_Spec §2, §4, §5, §6, §7`, `Component_Class_Design §1, §2, §4 test 7–10`, `Processing_Flow §1, §3, §4`), `RE.PAYOUT/API_Spec.md §7` (DDL ví), ADR-0009, `contracts/openapi/payment-internal.v1.yaml` (đối chiếu, **không đổi**), `standards/reliability-standard.md` (payOS: tạo link không retry, tra cứu/hủy có retry, timeout 2.500 ms).
+`design/RENTAL/RE.DEPOSIT_SAGA/` v1.2 (`API_Spec §1–§6`, `Component_Class_Design §1–§6, §8`, `Processing_Flow §1–§3, §6`), `design/RENTAL/RE.VIEWING/` v1.1, `RE.DEPOSIT_LIFECYCLE/API_Spec.md §6` (`REFUND_WINDOW_SECONDS`, `AUTO_RELEASE_SECONDS` cho mốc khi `PAID`), ADR-0004, `contracts/openapi/listing-internal.v1.yaml`, `payment-internal.v1.yaml` 1.0.1, `contracts/events/` (`payment.deposited`, `rental.deposit-created`, `rental.viewing-*`). Hợp đồng: **không đổi**.
 
 ## Definition of Done
 
-- [x] Test 7–10 ở `RE.PAYMENT/Component_Class_Design.md §4` pass (`test` + `test:infra`, 2026-11-21)
-- [x] Response `/internal/payment-orders*` khớp `payment-internal.v1.yaml` (mọi status trong infra-spec)
-- [x] `pnpm --filter @realestate/payment test` 150/150, `test:e2e` 97/97, `test:infra` 36/37: `payment-orders` 23/23, `messaging` 8/8, `storage` 5/6 do môi trường (không có S3 thật; template chưa sửa cũng 5/6) — **A chạy lại `storage` với Silo**
+- [x] Test 1, 2, 9, 14, 15, 18 ở `RE.DEPOSIT_SAGA/Component_Class_Design.md §8` pass (thêm 16, giữ chỗ 409, tạo order 504; 2026-11-21)
+- [x] Test 1–10 ở `RE.VIEWING/Component_Class_Design.md §3` pass
+- [x] rental `test` 158/158, `test:e2e` 97/97, `test:infra`: `rental` 18/18, `messaging` 8/8, `storage` 5/6 (không có S3 thật; template cũng 5/6); mọi sự kiện kiểm bằng `expectEventMatchesContract`
 - [x] `pnpm lint`, `format:check`, `build`, `contracts:check` sạch
-- [x] Số truy vấn trong ngưỡng ghi 6: tạo 3, gọi lại 1, hủy 2, tra cứu 1 (đếm bằng log SQL trong infra-spec)
-- [x] Walkthrough `guides/RE_Payment_Code_Walkthrough.md` (mới), dòng ở `project-knowledge/CLAUDE.md §2.5`, README payment, compose, `.env.example`
+- [x] Số truy vấn: `POST /deposits` 5, đặt lịch 2, hủy 2, danh sách ≤ 2 (đếm bằng log SQL)
+- [x] Walkthrough `guides/RE_Rental_Code_Walkthrough.md` (mới), dòng `CLAUDE.md §2.5`, README, compose, `.env.example`, CI matrix
+- [ ] Kiểm chứng qua payOS thử nghiệm thật (PHASE-3): **cần khóa payOS và webhook (T3.4)** → A làm trên máy sau T3.4; Claude đã kiểm bằng listing, payment giả theo hợp đồng + chạy `node dist/main.js` (`/health` db, redis, rabbitmq `up`)
 
 ## Các bước thực hiện (tổng quan)
 
 - [x] 1. Đọc context, đối chiếu thiết kế
-- [x] 2. Quét tái sử dụng + kế hoạch chi tiết (Claude tự duyệt 2026-11-21 theo quyền A trao)
-- [x] 3. Dựng service từ template (`service-scaffold`), dọn module mẫu, build/test xanh
-- [x] 4. Migration + entity (`payment_orders` + bảng ví, yêu cầu hoàn, rút, chứng từ, nhật ký)
-- [x] 5. TDD: `PayosClient` → `PaymentOrderService` (tạo, hủy, tra cứu) → controller nội bộ
-- [x] 6. Test hạ tầng 7–10, hợp đồng, đếm truy vấn
-- [x] 7. Compose, `.env.example`, README, walkthrough, `code-review`, commit, PR
+- [x] 2. Quét tái sử dụng + kế hoạch (Claude tự duyệt 2026-11-21 theo quyền A trao)
+- [x] 3. Dựng service từ template, cấu hình, migration, entity
+- [x] 4. TDD: `ViewingService` + controller (5 route, 4 sự kiện)
+- [x] 5. TDD: `ListingLock`, `ListingClient`, `PaymentClient`
+- [x] 6. TDD: `DepositSagaService.start`, `POST /deposits`
+- [x] 7. TDD: `PaymentEventsHandler` (`payment.deposited`)
+- [x] 8. Test hạ tầng, đếm truy vấn; compose, docs, `code-review`, commit
 
 ## Tái sử dụng
 
-Quét trên source hiện tại (`services/_template-nest/src`, `services/listing/src`, `services/identity/src`):
+Quét `services/_template-nest/src`, `services/listing/src`, `services/payment/src`, `services/identity/src`:
 
 | Nhu cầu | Quyết định | Chỗ có sẵn |
 |---|---|---|
-| Khung service (config, logging, envelope, lỗi, health, DB, outbox, InternalHttp) | DÙNG LẠI (chép nguyên) | `services/_template-nest` |
-| Mẫu cờ bật module + kiểm biến bắt buộc lúc khởi động | DÙNG LẠI (cùng cách) | `listing/config/listing.env.ts`, `feature-flags.ts` `isListingEnabled`, `env.bootstrap.ts` |
-| `AppException`, `createUuidParamPipe`, `@Public`, `ApiExcludeController` cho `/internal/*` | DÙNG LẠI | `src/common/*`, mẫu `listings.internal.controller.ts` |
-| Nhận biết `23505` theo tên ràng buộc | DÙNG LẠI cách làm (hàm nhỏ cục bộ) | identity `unique-violation.ts`, listing `listing.sql.ts`: là service khác, **không import**; payment viết hàm riêng 1 dòng trong `payment/errors` |
-| Kiểm response theo OpenAPI, test hạ tầng, `createTestApp` | DÙNG LẠI | template `test/helpers/contracts.ts`, `infra.ts`, `create-test-app.ts` |
-| `PayosClient` (bọc `@payos/node`) | VIẾT MỚI | Không có; SDK đã chốt ở `architecture.md §5` |
-| `PaymentOrderService`, entity, DTO, lỗi `PAYMENT_*` | VIẾT MỚI | Nghiệp vụ riêng payment |
+| Khung service, `InternalHttpService` (timeout, retry, `details.outcome` C14), `@Idempotent()` + Redis, outbox, `EventConsumer` + `EventHandlerRegistry` + `processed_events`, `AuthModule`/`@Roles`/`@CurrentUser`, `PageQueryDto`/`Paginated`, `createUuidParamPipe` | DÙNG LẠI (chép nguyên) | `services/_template-nest` |
+| `RedisService.client` cho khóa theo tin | DÙNG LẠI | template `src/redis` |
+| Mẫu cờ bật module + biến bắt buộc | DÙNG LẠI cách làm | `listing.env.ts`, `payment.env.ts` |
+| Nhận biết `23505` theo tên ràng buộc | Hàm cục bộ 1 dòng (không import service khác) | như payment `payment.errors.ts` |
+| Test: `expectEventMatchesContract`, `expectResponseMatchesOpenApi`, `http-upstream.ts` (máy chủ HTTP giả cho listing, payment) | DÙNG LẠI | template `test/helpers` |
+| `ListingLock`, `ListingClient`, `PaymentClient`, `DepositSagaService`, `ViewingService`, `PaymentEventsHandler` | VIẾT MỚI | Nghiệp vụ rental |
 
-Không có thành phần dùng chung mới cho nhiều service; không chạm `_template-nest`.
+Không có thành phần dùng chung mới; không chạm `_template-nest`.
 
 ## Kế hoạch chi tiết
 
-> **Claude tự duyệt 2026-11-21** (A trao quyền, `decisions-log.md`). TDD bật (`warn`).
+> **Claude tự duyệt 2026-11-21.** TDD bật (`warn`).
 
-### A. Điểm chưa rõ trong thiết kế (ghi `van-de-can-quyet-dinh.md` C22, C23; không chặn phần còn lại)
+### A. Phạm vi T3.2 so với T3.3, T3.4 (theo `PHASE-3.md`)
 
-| # | Chỗ | Cách làm trong T3.1 |
-|---|---|---|
-| C22 | `API_Spec §2c`: `GET` "hỏi payOS nếu `PENDING` mà chưa có link" — không nói làm gì với kết quả; SDK payOS tra cứu không trả `checkoutUrl` | **Chưa làm phần hỏi payOS**: `GET` chỉ đọc DB (đúng mô tả "Chỉ đọc" của hợp đồng). Chờ A chốt |
-| C23 | `API_Spec §2a`: gọi lại khi order `PENDING` **chưa có** link (lần đầu payOS lỗi) — bảng chỉ có dòng "`PENDING` có link → 200" | Trả `503 PAYMENT_PROVIDER_UNAVAILABLE`, không gọi lại payOS (theo `§7.3`: "order giữ `PENDING` không link; job của rental xử lý"); đề xuất cho A: tra payOS theo `orderCode`, chưa có thì tạo lại |
+| Có trong T3.2 | Để T3.3/T3.4 |
+|---|---|
+| `start` luồng thành công; lỗi giữ chỗ/snapshot trả nguyên (không có đơn); ghi đơn lỗi → nhả chỗ best-effort (`PUT AVAILABLE`), `500`; tạo order lỗi → `saga_log` theo `CallOutcome` rồi trả lỗi (đơn giữ `PENDING_PAYMENT`) | `CompensationService.cancelAfterHold` (test 5), job (a) đối soát (test 6–8), `ListingSyncService`, job (b), `HoldExpiryJob` (test 11–13, 16, 17) |
+| `PaymentEventsHandler` đặt `listing_target_status='DEPOSITED'`, `listing_synced_at=null` | Đẩy `DEPOSITED` sang listing (job (b), T3.3) |
 
-Chi tiết cài đặt (không đổi luật, ghi walkthrough): hủy order chưa có link thì **không** gọi payOS (link chưa từng được tạo thành công, và link payOS tự hết hạn đúng `expiresAt`); `description` gửi payOS là `DC<orderCode>` (payOS giới hạn 25 ký tự), `listingTitle` vào `items[0].name`.
+Cho tới T3.3, đơn có order lỗi nằm `PENDING_PAYMENT` tới khi job có mặt; chỗ ở listing tự hết theo `held_until`.
 
-### B. File
+### B. Cách hiểu đã chọn (không thêm luật, mã lỗi)
+
+| Chỗ | Cách làm |
+|---|---|
+| Lớp chặn 3 (`ux_deposits_active_listing`, `Processing_Flow §2`): "Lỗi DB → bù trừ, `409`" không ghi mã | `409 LISTING_NOT_AVAILABLE` (mã có sẵn, cùng nghĩa "người khác đã giữ") + nhả chỗ best-effort |
+| Body `CreateOrderRequest` của payment cần `listingTitle` | Lấy `title` của bản chụp (`listing_title` của đơn) |
+| `holdRemainingSeconds` | `max(0, floor((expiresAt - now)/1000))` |
+| Snapshot `404` | Chuyển nguyên `404 LISTING_NOT_FOUND`; `approvalStatus ≠ APPROVED` hoặc `status ≠ AVAILABLE` → `409 LISTING_NOT_AVAILABLE` (§1 bước 3) |
+| `RENTAL_INVALID_TRANSITION`, `RENTAL_VIEWING_*` | Đúng catalog `RE.VIEWING §3` |
+
+### C. File
 
 | File | Việc |
 |---|---|
-| `services/payment/**` | Chép `services/_template-nest` (bỏ `node_modules`, `dist`, `.env`, `openapi.json`); đổi `name`, `description`, `SERVICE_NAME=payment`, `PORT=3004`, `Dockerfile`; xóa module mẫu (`src/example/`, entity + migration mẫu, `test/example.e2e-spec.ts`) |
-| `package.json` (payment), `pnpm-lock.yaml` | `@payos/node@2.0.5` ghim chính xác (2.0.6 mới 9 ngày) |
-| `src/config/env.validation.ts` (+spec) | `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (tùy chọn ở schema chung), `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL`, `PAYOS_TIMEOUT_MS` (2500) |
-| `src/payment/config/payment.env.ts` (+spec), `src/config/env.bootstrap.ts`, `feature-flags.ts` | Bắt buộc `DATABASE_URL`, `PAYOS_*` ba khóa, `JWT_ISSUER`, khóa công khai JWT; `isPaymentEnabled = isDatabaseEnabled()` |
-| `src/database/migrations/1734000000000-create-payment-tables.ts` | DDL `RE.PAYMENT §6` + `RE.PAYOUT §7` (+ một dòng `admin_wallet` id 1); có `down` |
-| `src/payment/entities/payment-order.entity.ts` | Bảng `payment_orders` |
-| `src/payment/clients/payos.client.ts` (+spec) | `createLink` (`maxRetries: 0`), `cancelLink` (retry mặc định của SDK tắt, dùng `maxRetries: 2`), timeout `PAYOS_TIMEOUT_MS`; lỗi mạng/timeout/5xx → `503 PAYMENT_PROVIDER_UNAVAILABLE`; không log khóa, không chép lỗi gốc |
-| `src/payment/services/payment-order.service.ts` (+spec) | `create`, `cancel`, `get` theo `API_Spec §2` |
-| `src/payment/controllers/payment-orders.internal.controller.ts` | `POST /internal/payment-orders` (201/200), `GET /internal/payment-orders/:depositId`, `POST …/:depositId/cancel` (200); `@Public` + `@ApiExcludeController` như listing |
-| `src/payment/dto/payment-order.dto.ts` (+spec) | Body tạo order (khớp `CreateOrderRequest`, `additionalProperties: false`), view |
-| `src/payment/errors/payment.errors.ts` | 5 mã của `API_Spec §4` |
-| `src/payment/payment.module.ts`, `src/app.module.ts` | Nối module |
-| `test/setup-infra-env.ts`, `test/payment-orders.infra-spec.ts` | `payment_db`; test 7–10, hợp đồng, đếm truy vấn |
-| `infra/compose/docker-compose.yml`, `.env.example` gốc, `services/payment/.env.example` | Service `payment` profile `apps`; biến `PAYOS_*` |
-| `services/payment/README.md`, `guides/RE_Payment_Code_Walkthrough.md`, `project-knowledge/CLAUDE.md §2.5`, `project-structure.md` | Tài liệu |
+| `services/rental/**` | Chép template, `SERVICE_NAME=rental`, `PORT=3003`, bỏ module mẫu |
+| `src/config/env.validation.ts` (+spec), `src/rental/config/rental.env.ts` (+spec), `env.bootstrap.ts`, `feature-flags.ts` | `HOLD_TTL_SECONDS` 600, `DEPOSIT_LOCK_TTL_MS` 10000, `LISTING_CALL_TIMEOUT_MS` 2000, `PAYMENT_CALL_TIMEOUT_MS` 3000, `REFUND_WINDOW_SECONDS` 172800, `AUTO_RELEASE_SECONDS` 259200; bắt buộc `DATABASE_URL`, `REDIS_URL`, `RABBITMQ_URL`, `INTERNAL_LISTING_URL`, `INTERNAL_PAYMENT_URL`, `JWT_ISSUER`, khóa công khai JWT |
+| `src/database/migrations/1735000000000-create-rental-tables.ts` | DDL `RE.DEPOSIT_SAGA §6` + `RE.VIEWING §4` |
+| `src/rental/entities/` `deposit`, `saga-log`, `viewing` | |
+| `src/rental/locks/listing.lock.ts` (+spec) | `SET NX PX`, nhả bằng Lua so token |
+| `src/rental/clients/listing.client.ts`, `payment.client.ts` (+spec) | Qua `InternalHttpService`; hold `POST` không retry; `createOrder` `idempotent: true`; `classify(err)` → `CallOutcome` |
+| `src/rental/services/deposit-saga.service.ts` (+spec), `viewing.service.ts` (+spec) | |
+| `src/rental/events/payment-events.handler.ts` (+spec) | Đăng ký `payment.deposited` |
+| `src/rental/controllers/deposits.controller.ts`, `viewings.controller.ts`; `dto/`, `errors/rental.errors.ts`, `rental.module.ts` | |
+| `test/setup-infra-env.ts`, `test/*.infra-spec.ts` | `rental_db`, Redis, RabbitMQ; listing, payment giả bằng `http-upstream` theo `example` của hợp đồng |
+| `infra/compose/docker-compose.yml`, `.env.example` gốc (bỏ 4 biến luồng cũ theo A3), `services/rental/.env.example`, CI matrix | |
+| README, `guides/RE_Rental_Code_Walkthrough.md`, `CLAUDE.md §2.5`, `project-structure.md`, `implementation/progress.md` (tick T2.5, T3.1) | |
 
-Gateway: không đổi (route webhook đã có, xử lý ở T3.4). `contracts/`: không đổi.
-
-### C. Test
-
-| Tầng | Test |
-|---|---|
-| `test` | `payos.client` (tham số gửi SDK, `maxRetries: 0` khi tạo, map lỗi → 503, không lộ khóa), `payment-order.service` (bảng §2a, §2b với SDK giả: thứ tự gọi, `expiresAt` ≤ now, trạng thái), DTO, `payment.env`, `env.validation` |
-| `test:infra` | **7** tạo hai lần cùng `depositId` → một order, một lần gọi payOS; **8** payOS timeout → `503`, order có trong DB trước khi gọi; **9** hủy `PENDING` → payOS `cancel` gọi trước `UPDATE`; **10** hủy khi webhook vừa thắng (`PAID`) → `409`. Thêm: hai lần tạo đồng thời, hợp đồng OpenAPI mọi response, đếm truy vấn. payOS thay bằng bản giả qua `overrides` (không gọi payOS thật) |
-| `test:e2e` | Các e2e chung của template giữ nguyên |
-
-### D. Số truy vấn (ngưỡng ghi 6)
+### D. Số truy vấn
 
 | Endpoint | Truy vấn |
 |---|---|
-| tạo (mới) | 3: SELECT theo `depositId`, INSERT (`nextval` trong câu), UPDATE link |
-| tạo (đã có) | 1 |
-| hủy | 2: SELECT, UPDATE (+1 SELECT khi UPDATE 0 dòng) |
-| tra cứu | 1 |
+| `POST /deposits` | 5: INSERT đơn, INSERT `saga_log`, INSERT outbox; UPDATE order, INSERT `saga_log` (`Processing_Flow §6`) — idempotency ở Redis |
+| `POST /viewings` | 2: INSERT, outbox |
+| respond / confirm-viewed / cancel | 2 (UPDATE, outbox) + 1 SELECT khi UPDATE 0 dòng |
+| `GET /viewings/mine` | 2 (data + count), ngưỡng danh sách 4 |
+| `payment.deposited` | inbox 1 + UPDATE 1 + SELECT 1 + UPDATE viewings 1 + outbox n |
 
 ## Blockers / Ghi chú
 
-- `code-review` 5 chiều (2026-11-21): không CRITICAL, không MAJOR. Security: `/internal/*` `@Public` như listing (hạn chế đã biết), không log khóa, log SDK tắt. Performance: 3/1/2/1 truy vấn, `deposit_id`, `payos_order_code` có UNIQUE (index). Correctness: không transaction bao payOS; `bigint` qua `bigintToNumber`; đua hủy/webhook bằng `UPDATE ... WHERE status='PENDING'`. Style: đúng `project-structure.md`, controller mỏng, env và 5 mã lỗi khai đủ. Reuse: không import chéo service. MINOR: SDK payOS tự đọc `PAYOS_BASE_URL` nếu có (test dùng), ghi walkthrough.
-- TDD: DTO spec và infra-spec viết sau code (tech-debt #20).
+- `code-review` 5 chiều (2026-11-21): không CRITICAL, không MAJOR. Security: route có `@Roles`, người gọi luôn là `sub`; `saga_log.detail` chỉ có mã lỗi và status; không log URL có mật khẩu. Performance: 5/2/2/≤2 truy vấn, index theo DDL. Correctness: không transaction bao HTTP; khóa nhả theo token; `UPDATE ... WHERE status` cho mọi chuyển trạng thái; handler chỉ dùng `manager` của inbox. Style: đúng `Component_Class_Design §1`, controller mỏng. Reuse: không import chéo service. MINOR: ghi chú của chủ trọ khi từ chối chưa lưu (ghi walkthrough).
 
-- T2.5 đã merge vào `develop` (PR #25, 2026-11-21); đã merge `develop` vào nhánh này, gỡ xung đột bằng cách giữ cả hai phần (`.env.example`, `CLAUDE.md §2.5`, `van-de-can-quyet-dinh.md` C21–C23, `tech-debt.md` #17–#20).
+- Kiểm chứng end-to-end bằng payOS thử nghiệm thật cần khóa payOS của A và webhook (T3.4).
