@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-20 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-21 |
 
 **Bảo vệ:** 2026-12-18 (M5) · **Mốc mới** (dời 2026-11-16): M0 11-20, M1 11-27, M2 12-04, M3 12-09, M4 12-11 (`README.md` — Lịch và mốc) · **Hạn nộp báo cáo:** 2026-12-11 (M4, chốt 2026-11-16) · **Đề tài:** Thiết kế hệ thống cho thuê nhà, căn hộ, chung cư Real-estate theo kiến trúc microservices · **Nhóm:** 5 · **Số thành viên:** 3
 
@@ -42,11 +42,11 @@
 - [x] T2.2 listing: khung, CRUD sản phẩm, duyệt, ảnh — A (2026-11-20, PR #19, `e024605`; A tự giao lại từ B)
 - [x] T2.3 listing: tìm kiếm PostGIS, API nội bộ giữ chỗ — A (2026-11-20, PR #21, `0cbd2ea`; A tự giao lại từ B)
 - [x] T2.4 listing: seed dữ liệu — A (2026-11-20, PR #23, `db0cfc4`; A tự giao lại từ B)
-- [ ] T2.5 identity: OTP, quên mật khẩu, Google, khóa tài khoản, số điện thoại — A
+- [x] T2.5 identity: OTP, quên mật khẩu, Google, khóa tài khoản, số điện thoại — A (2026-11-21, PR #25, `02752d6`)
 
 ## Phase 3 — rental, payment
 
-- [ ] T3.1 payment: khung, payment order, payOS — C
+- [x] T3.1 payment: khung, payment order, payOS — A (2026-11-21, PR #26, `e231b32`; A tự giao lại từ C)
 - [ ] T3.2 rental: khung, lịch xem, saga luồng thành công — C
 - [ ] T3.3 Saga: bù trừ, đối soát, đồng bộ listing — C
 - [ ] T3.4 Webhook, hết hạn giữ chỗ, tiền đến muộn — C
