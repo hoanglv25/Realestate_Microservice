@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-21 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-22 |
 
 **Bảo vệ:** 2026-12-18 (M5) · **Mốc mới** (dời 2026-11-16): M0 11-20, M1 11-27, M2 12-04, M3 12-09, M4 12-11 (`README.md` — Lịch và mốc) · **Hạn nộp báo cáo:** 2026-12-11 (M4, chốt 2026-11-16) · **Đề tài:** Thiết kế hệ thống cho thuê nhà, căn hộ, chung cư Real-estate theo kiến trúc microservices · **Nhóm:** 5 · **Số thành viên:** 3
 
@@ -47,9 +47,10 @@
 ## Phase 3 — rental, payment
 
 - [x] T3.1 payment: khung, payment order, payOS — A (2026-11-21, PR #26, `e231b32`; A tự giao lại từ C)
-- [ ] T3.2 rental: khung, lịch xem, saga luồng thành công — C
+- [x] T3.2 rental: khung, lịch xem, saga luồng thành công — A (2026-11-22, PR #27, `8021431`; kiểm chứng payOS thật chuyển sang T3.4a)
 - [ ] T3.3 Saga: bù trừ, đối soát, đồng bộ listing — C
-- [ ] T3.4 Webhook, hết hạn giữ chỗ, tiền đến muộn — C
+- [ ] T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn — A (tách 2026-11-22; gồm kiểm chứng payOS thật chuyển từ T3.2)
+- [ ] T3.4b Hết hạn giữ chỗ — A (tách 2026-11-22)
 - [ ] T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân — B (chuyển từ C 2026-11-16)
 - [ ] T3.6 Payout: hoàn, rút, chứng từ, ví — C
 
@@ -95,3 +96,5 @@
 | 2026-11-19 | A | T2.1 merge vào `develop` (PR #16, `b88817a`), CI `check`, `test` (template-nest, identity, api-gateway), `ci` xanh. identity unit 201, e2e 97, infra 99 PASS. Có: `bank_accounts` mã hóa AES-256-GCM (AAD `userId`), route 6–8, `GET /internal/users/:id/bank-account` khớp `identity-internal.v1.yaml`, `revokeAllForUser`, `BANK_ACCOUNT_ENCRYPTION_KEY` bắt buộc; template thêm `PageQueryDto`, `createUuidParamPipe`, `expectResponseMatchesOpenApi`. Repo chuyển sang `hoanglv25/Realestate_Microservice`. A chốt C19 phương án (b) | Tick T2.1; sửa template theo C19 trước T2.2 rồi làm T2.2 |
 | 2026-11-20 | A | T2.2 merge vào `develop` (PR #19, `e024605`), CI `check`, `test` (template-nest, identity, api-gateway, listing), `ci` xanh; listing lần đầu vào ma trận CI. listing unit 233, e2e 97, infra 52 PASS; số truy vấn mỗi route 2–5 (ngưỡng 6). Có: `services/listing` (cổng 3002, `listing_db` PostGIS, bucket `listing-images`) trong profile `apps`, route 1–10, 12, `/mine`; template thêm `StorageService.headObject` (chép sang identity). `RE.LISTING` v1.2, `RE.SERVICE_TEMPLATE` v2.1. Nợ: tech-debt #14 (ảnh mồ côi trên S3), #15 (bảng outbox không dùng) | Tick T2.2; A chốt `RE.LISTING` §8 cùng ngày (v1.3, đúng như code); sang T2.3 |
 | 2026-11-20 | A | T2.3 merge vào `develop` (PR #21, `0cbd2ea`), CI `check`, `test` (template-nest, identity, api-gateway, listing), `ci` xanh. listing unit 356, e2e 97, infra 109 PASS; 50 lời giữ chỗ đồng thời đúng một `200` (thử đột biến bỏ `held_until < now()` thì test fail). Có: route 11 tìm kiếm `ST_DWithin` (`EXPLAIN` 5.000 tin dùng `ix_listings_location`), `/internal/listings/:id`, `/holds`, `/status` khớp `listing-internal.v1.yaml`; 3 index tìm kiếm (GIN `amenities`, `created_at`, `area_m2`). Số truy vấn: tìm kiếm 2, bản chụp 1, giữ chỗ 1–2, đổi trạng thái 1–2. `RE.LISTING` v1.4, `RE.DEPOSIT_SAGA` v1.2 | Tick T2.3; C20 (rental xử lý `409` khi đích `AVAILABLE`) chốt ở T3.x; sang T2.4 (DoD có chạy lại `EXPLAIN` trên seed thật) |
+| 2026-11-22 | A | T3.2 merge vào `develop` (PR #27, `8021431`), CI có thêm `test (rental)`. rental unit 158, e2e 97, infra 18 + messaging 8 PASS. payOS không có môi trường thử riêng (giao dịch thật, số tiền nhỏ) và payment chưa có route webhook, nên mục kiểm chứng payOS thật chuyển sang T3.4a; tách T3.4 → T3.4a (webhook), T3.4b (hết hạn giữ chỗ). Chặng A đã chạy: đặt cọc qua gateway tạo được link payOS thật (`orderCode` 100000, 2.000đ, chưa thanh toán) | Tick T3.2; làm T3.4a |
+| 2026-11-22 | A | T3.4a kiểm chứng **payOS thật**: cloudflared → gateway 8080; payOS chấp nhận URL webhook; `orderCode` 100001 chuyển 2.000đ thật → webhook chữ ký đúng, `PAID`; order `PAID`, ví 2.000; `payment.deposited` qua RabbitMQ → đơn rental `PAID` (`paid_at` khớp `transactionDateTime`). Đây cũng là mục DoD payOS thật chuyển từ T3.2. payment `test:infra` 49/49 trên máy A | Commit, PR T3.4a; sau merge tick T3.4a; tiếp T3.3 (chốt C20) |

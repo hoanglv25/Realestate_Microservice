@@ -98,24 +98,47 @@ docker compose ... start payment
 
 ## T3.4 Webhook, hết hạn giữ chỗ, tiền đến muộn
 
+> **Tách 2026-11-22 (A):** T3.4a (webhook, ghi nhận tiền, tiền đến muộn) làm trước để kiểm chứng payOS thật; T3.4b (hết hạn giữ chỗ) sau. payOS không có môi trường thử riêng (giao dịch thật, số tiền nhỏ), nên mục kiểm chứng payOS thật của T3.2 chuyển sang T3.4a.
+
+### T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn
+
 | | |
 |---|---|
-| **Người làm** | A — tự giao lại khi cần (trước 2026-11-18: C) |
-| **Thời lượng** | ~10 giờ (ước 2026-11-16) |
-| **Hạn** | M2 — 2026-12-04 (dời) |
-| **Mã WBS** | E4-5, E4-4b |
-| **Đọc trước** | `RE.PAYMENT/API_Spec.md §1`, `RE.DEPOSIT_SAGA/Processing_Flow.md §4` |
-| **Phụ thuộc** | T3.2 |
+| **Người làm** | A |
+| **Thời lượng** | ~6 giờ (tách từ ~10 giờ của T3.4) |
+| **Hạn** | M2 — 2026-12-04 |
+| **Mã WBS** | E4-5 |
+| **Đọc trước** | `RE.PAYMENT/API_Spec.md §1`, `Component_Class_Design.md §3–§4`, `Processing_Flow.md §2–§6`, `RE.PAYOUT/API_Spec.md` (DDL ví) |
+| **Phụ thuộc** | T3.1, T3.2 |
 
 **Các bước:**
 
-1. `WebhookService`, `DepositCaptureService` (PAID, LATE).
-2. `HoldExpiryJob`: hủy link trước, `EXPIRED` sau.
-3. Script giả webhook có chữ ký hợp lệ cho test (sai chữ ký, sai số tiền, trùng, đến muộn).
+1. `PayosClient.verify`, `WebhookService`, `DepositCaptureService` (PAID, LATE), `POST /api/v1/payments/payos/webhook`.
+2. Script giả webhook có chữ ký hợp lệ cho test (sai chữ ký, sai số tiền, trùng, đến muộn).
+
+**Kiểm chứng:**
+
+- Script giả webhook: hợp lệ → order `PAID`, đơn rental `PAID`; gửi lại → `DUPLICATE`; sai chữ ký, sai số tiền → không đổi ví.
+- **payOS thật** (chuyển từ T3.2): đường hầm tới gateway 8080, khai URL webhook trên my.payos.vn, tin cọc vài nghìn đồng, quét QR trả tiền → `payos_webhook_events.result = PAID`, đơn rental `PAID`.
+
+**DoD:** Test 1–6, 10–12 ở `RE.PAYMENT/Component_Class_Design.md §4` pass; kiểm chứng payOS thật có kết quả ghi vào `progress.md`.
+
+### T3.4b Hết hạn giữ chỗ
+
+| | |
+|---|---|
+| **Người làm** | A |
+| **Thời lượng** | ~4 giờ |
+| **Hạn** | M2 — 2026-12-04 |
+| **Mã WBS** | E4-4b |
+| **Đọc trước** | `RE.DEPOSIT_SAGA/Processing_Flow.md §4` |
+| **Phụ thuộc** | T3.4a |
+
+**Các bước:** `HoldExpiryJob`: hủy link trước, `EXPIRED` sau.
 
 **Kiểm chứng:** `HOLD_TTL_SECONDS=60`, không thanh toán → đơn `EXPIRED` trong ≤ 70 giây, BĐS `AVAILABLE` (E4). Gửi webhook giả sau đó → `late_payments` (E5).
 
-**DoD:** Test 11–13, 16 ở `RE.DEPOSIT_SAGA` và 1–6, 11–12 ở `RE.PAYMENT` pass.
+**DoD:** Test 11–13, 16 ở `RE.DEPOSIT_SAGA` pass.
 
 ---
 
