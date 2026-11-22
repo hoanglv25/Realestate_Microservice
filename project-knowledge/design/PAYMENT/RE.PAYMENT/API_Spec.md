@@ -7,7 +7,7 @@
 | **Quy tắc** | BR-04, BR-07, BR-08, BR-09, BR-10 |
 | **Quyết định** | ADR-0009 |
 | **CSDL** | `payment_db` / `payment_user`: `payment_orders`, `payos_webhook_events`, `late_payments` (ví: `RE.PAYOUT`) |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-21 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. API công khai
 
@@ -27,7 +27,9 @@ Quyền: `payos` (không token). Body: nguyên văn của payOS (`code, desc, su
 | 8 | Order `CANCELLED` | Tiền đến muộn (§1.2) với **số tiền thực nhận** (kể cả khác tiền cọc), `result = LATE`, `200` |
 | 9 | Order `PAID` (reference khác) | Thanh toán hai lần cho một order: xử lý như tiền đến muộn (§1.2), hoàn 100% số thực nhận |
 
-Trả `200` khi đã lưu webhook để payOS không gửi lại vô hạn; trả `5xx` khi DB lỗi để payOS gửi lại.
+Trả `200` khi đã lưu webhook để payOS không gửi lại vô hạn; trả `5xx` khi DB lỗi để payOS gửi lại. Body `200` cố định `{ "data": { "received": true }, "meta": … }`, không lộ `result` (chốt 2026-11-22). `result` có thêm giá trị tạm `RECEIVED` (đã lưu, chưa có kết quả).
+
+`paid_at` và `paidAt` của sự kiện lấy từ `data.transactionDateTime` (`YYYY-MM-DD HH:mm:ss`, giờ Việt Nam, đọc theo `+07:00`); sai dạng thì lấy giờ hiện tại và log `warn` (chốt 2026-11-22).
 
 #### 1.1 Ghi nhận đặt cọc — một transaction
 
@@ -35,7 +37,7 @@ Trả `200` khi đã lưu webhook để payOS không gửi lại vô hạn; tr�
 
 #### 1.2 Tiền đến muộn (BR-10) — một transaction
 
-`INSERT late_payments` → `wallet_transactions LATE_PAYMENT_IN` + `balance_vnd += amount` → `INSERT refund_requests (requester_type='SYSTEM', amount 100%, status='PENDING_ADMIN')` → outbox `payment.late-payment-credited`. Đơn bên rental giữ `EXPIRED`.
+`INSERT refund_requests (requester_type='SYSTEM', amount 100%, status='PENDING_ADMIN')` → `INSERT late_payments (… refund_request_id)` → `wallet_transactions LATE_PAYMENT_IN` + `balance_vnd += amount` → outbox `payment.late-payment-credited`. Đơn bên rental giữ `EXPIRED`. Yêu cầu hoàn ghi trước để `late_payments` có ngay `refund_request_id` (chốt 2026-11-22).
 
 ## 2. API nội bộ
 
@@ -98,7 +100,8 @@ Body: `{ depositId, tenantId, ownerId, listingTitle, amountVnd, expiresAt }`.
 | `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` | bắt buộc | Môi trường thử nghiệm payOS |
 | `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL` | `http://localhost:3000/payment/return`, `http://localhost:3000/payment/cancel` | Trang của giao diện Next.js; `returnUrl` không phải bằng chứng thanh toán |
 | `PAYOS_TIMEOUT_MS` | `2500` | Phải < `PAYMENT_CALL_TIMEOUT_MS` của rental (3000). Không retry tạo link |
-| `RABBITMQ_URL`, `OUTBOX_*` | | Chỉ phát |
+| `RABBITMQ_URL` | bắt buộc (từ T3.4a) | Chỉ phát (`payment.deposited`, `payment.late-payment-credited`), không nghe queue |
+| `OUTBOX_*` | như template | |
 
 ## 6. DDL (đề xuất theo Báo cáo Bảng 3.5)
 

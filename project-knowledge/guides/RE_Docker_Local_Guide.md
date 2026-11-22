@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-18 (T1.3: profile `apps`) |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-22 (T3.4a: payOS thật, webhook giả) |
 
 ## 1. Yêu cầu
 
@@ -113,12 +113,36 @@ Chủ của tin NN: chủ trọ `((NN − 1) mod 3) + 1`. Tin theo khoảng các
 
 Route 11 quanh điểm trên với `radiusKm=2` trả 12 tin (11 `AVAILABLE` + tin 13 `RENTED`); `radiusKm=3` thêm 16, 17, 18. Không có tin `HELD`, `DEPOSITED` (cần đơn đặt cọc thật) và không có ảnh (tải qua API). Đăng nhập bằng email trên với mật khẩu `SEED_USER_PASSWORD` đã dùng khi seed.
 
-## 6. Đặt cọc thật với payOS thử nghiệm
+## 6. Đặt cọc với payOS thật
 
-1. Đặt `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (môi trường thử nghiệm) trong `.env`.
-2. Mở đường hầm tới gateway: `ngrok http 8080` hoặc `cloudflared tunnel --url http://localhost:8080`.
-3. Khai URL webhook `https://<đường-hầm>/api/v1/payments/payos/webhook` `[cần xác nhận]` trong trang quản trị payOS.
-4. Demo hết hạn nhanh: `HOLD_TTL_SECONDS=60`.
+payOS **không có môi trường thử riêng**: giao dịch là chuyển khoản thật, vào tài khoản ngân hàng đã liên kết với kênh thanh toán. Khi thử dùng tin có tiền cọc nhỏ (vài nghìn đồng). Gói miễn phí có giới hạn số đơn/tháng: thử các nhánh lỗi bằng webhook giả (dưới), không tạo link thật thừa.
+
+1. Trên my.payos.vn: xác thực tổ chức (cá nhân, CCCD), liên kết tài khoản ngân hàng, tạo **kênh thanh toán**. Chép Client ID, API Key, Checksum Key vào `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` trong `.env` (KHÔNG phải `.env.example`, không dán vào chat; `security-policy.md §1`).
+2. Payment cần RabbitMQ (phát `payment.deposited` qua outbox): chạy profile `dev` trước, rồi `apps`.
+3. Mở đường hầm tới gateway: `cloudflared tunnel --url http://localhost:8080` (hoặc `ngrok http 8080`). Địa chỉ đổi mỗi lần chạy lại.
+4. Trên my.payos.vn, mục kênh thanh toán → Webhook URL: `https://<đường-hầm>/api/v1/payments/payos/webhook`. payOS gọi thử URL (`orderCode` 123, `reference` `TF230204212323`, chữ ký đúng): payment lưu lại với `IGNORED` (không phải giao dịch thành công) và trả `200`, nên URL được chấp nhận (đã thử 2026-11-22). Ô Webhook URL nằm ở **Kênh thanh toán → Cài đặt**; nút xoay cạnh Checksum Key tạo khóa mới (đổi thì cập nhật `.env` và dựng lại `payment`, **trước** khi khai URL). Khai lại mỗi khi đường hầm đổi địa chỉ.
+5. Đặt cọc qua gateway, mở `checkoutUrl`, quét QR, trả đúng số tiền. Kiểm:
+
+```powershell
+$u = (Select-String .env -Pattern '^PAYMENT_DB_USER=(.*)').Matches[0].Groups[1].Value.Trim()
+docker exec re-postgres psql -U $u -d payment_db -c "select order_code, reference, amount_vnd, result, received_at from payos_webhook_events order by received_at desc limit 5"
+docker exec re-postgres psql -U rental_user -d rental_db -c "select status, paid_at from deposits order by created_at desc limit 1"
+```
+
+Demo hết hạn nhanh: `HOLD_TTL_SECONDS=60` (T3.4b).
+
+### 6.1 Webhook giả có chữ ký (không trả tiền)
+
+Ký `data` bằng `PAYOS_CHECKSUM_KEY` (đọc từ `.env` gốc) đúng thuật toán SDK payOS, gửi qua gateway như payOS:
+
+```powershell
+pnpm --filter @realestate/payment webhook:fake -- --order-code 100001 --amount 2000                       # hợp lệ -> PAID
+pnpm --filter @realestate/payment webhook:fake -- --order-code 100001 --amount 2000 --reference <mã cũ>    # trùng -> DUPLICATE
+pnpm --filter @realestate/payment webhook:fake -- --order-code 100001 --amount 2000 --bad-signature       # sai chữ ký
+pnpm --filter @realestate/payment webhook:fake -- --order-code 100001 --amount 1000                       # sai số tiền
+```
+
+Tùy chọn khác: `--date "YYYY-MM-DD HH:mm:ss"` (giờ VN), `--failed` (`success=false`), `--url <url>` (mặc định `http://localhost:8080/api/v1/payments/payos/webhook`). Kết quả xem cột `result` ở bảng `payos_webhook_events` theo `reference` script in ra. Order đã hủy nhận webhook → `LATE` (`late_payments`, yêu cầu hoàn `SYSTEM`).
 
 ## 7. Reset
 
@@ -149,7 +173,8 @@ Build từ gốc repo: `docker build -f services/<service>/Dockerfile -t realest
 | `DEPENDENCY_UNAVAILABLE` | `pnpm infra:check`; trên laptop dùng cổng 5433 |
 | Consumer không nhận | Queue có binding chưa (`definitions.json`), `RABBITMQ_URL` có `%2F` |
 | Presigned URL không mở được | `S3_PUBLIC_ENDPOINT` |
-| Webhook không tới | Đường hầm còn chạy, URL trong trang payOS đúng |
+| Webhook không tới | Đường hầm còn chạy, URL trong trang payOS đúng (đổi mỗi lần chạy lại đường hầm); `payos_webhook_events` có dòng mới chưa |
+| Webhook tới nhưng đơn không `PAID` | `result` của webhook (`INVALID_SIGNATURE`: sai `PAYOS_CHECKSUM_KEY`; `AMOUNT_MISMATCH`: trả sai số tiền); RabbitMQ chạy chưa (`payment.deposited` nằm ở `outbox_events` chưa `published_at`) |
 | Theo một request | Lọc log theo `correlationId` |
 
 Xem thêm `standards/gotchas.md`.

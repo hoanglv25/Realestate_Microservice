@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Tạo link, nhận webhook, hủy link khi hết hạn, tiền đến muộn |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0009, Báo cáo v2 Hình 3.7, 3.9, 3.11 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. Tạo link
 
@@ -78,4 +78,12 @@ Cả hai đường đều là `UPDATE ... WHERE status='PENDING'`; Postgres khó
 
 ## 6. Số truy vấn
 
-Webhook: lưu raw (1) + đọc order (1) + transaction (order, giao dịch ví, ví, outbox, result: 5) = 7, trong ngưỡng 8 cho thao tác ghi có thay đổi tiền (`non-functional-standards.md §1`). Lưu nguyên văn trước mọi kiểm tra; mọi thay đổi tiền cùng transaction.
+| Nhánh | Truy vấn |
+|---|---|
+| `PAID` | lưu raw 1 + đọc order 1 + transaction (order, giao dịch ví, số dư, outbox, `result`) 5 = **7** |
+| `LATE` (order `CANCELLED`/`PAID`) | 1 + 1 + transaction (`result`, yêu cầu hoàn, `late_payments`, giao dịch ví, số dư, outbox) 6 = **8** |
+| Đua: order `PENDING` nhưng `UPDATE` 0 dòng (lệnh hủy vừa thắng) | 1 + 1 + transaction (`UPDATE` order 0 dòng + 6 của `LATE`) = **9** — A chấp nhận vượt ngưỡng ở nhánh hiếm này (2026-11-22) |
+| Sai chữ ký, bỏ qua | 1 |
+| Không có order, sai số tiền | 3 |
+
+Ngưỡng 8 cho thao tác ghi có thay đổi tiền (`non-functional-standards.md §1`). Lưu nguyên văn trước mọi kiểm tra; mọi thay đổi tiền cùng transaction.

@@ -57,12 +57,13 @@ describe('env.bootstrap (khởi động tiến trình)', () => {
     expect(r.stderr).toBe('');
   });
 
-  it('payment thiếu DB, khóa payOS, JWT -> thoát mã 1 và liệt kê từng thứ thiếu', () => {
+  it('payment thiếu DB, RabbitMQ, khóa payOS, JWT -> thoát mã 1 và liệt kê từng thứ thiếu', () => {
     const r = run({ SERVICE_NAME: 'payment' });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Thiếu cấu hình của payment-service');
     for (const name of [
       'DATABASE_URL',
+      'RABBITMQ_URL',
       'PAYOS_CLIENT_ID',
       'PAYOS_API_KEY',
       'PAYOS_CHECKSUM_KEY',
@@ -77,6 +78,7 @@ describe('env.bootstrap (khởi động tiến trình)', () => {
     const r = run({
       SERVICE_NAME: 'payment',
       DATABASE_URL: 'postgres://u:p@localhost:5433/payment_db',
+      RABBITMQ_URL: 'amqp://u:p@localhost:5672/',
       PAYOS_CLIENT_ID: 'client-id',
       PAYOS_API_KEY: 'api-key-bi-mat',
       PAYOS_CHECKSUM_KEY: 'checksum-bi-mat',

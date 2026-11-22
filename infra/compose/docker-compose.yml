@@ -394,6 +394,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-3000}
       DATABASE_URL: postgres://${PAYMENT_DB_USER:?thieu PAYMENT_DB_USER}:${PAYMENT_DB_PASSWORD:?thieu PAYMENT_DB_PASSWORD}@postgres:5432/${PAYMENT_DB_NAME:?thieu PAYMENT_DB_NAME}
+      # T3.4a: webhook phat payment.deposited, payment.late-payment-credited qua outbox (chi phat, khong nghe queue)
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?thieu RABBITMQ_USER}:${RABBITMQ_PASSWORD:?thieu RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-domain.events}
       # Khoa payOS that chi nam trong .env (khong commit). De trong thi chinh payment bao thieu va dung
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
       PAYOS_API_KEY: ${PAYOS_API_KEY:-}
@@ -409,6 +412,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
     networks: [realestate-net]
 
   # api-gateway: diem vao duy nhat cho client. Khong dung DB, Redis, RabbitMQ, S3.

@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/payment/src/payment/` |
 | **Quy ước** | `standards/coding-convention.md §4`, `standards/reliability-standard.md §3` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. Cấu trúc
 
@@ -67,26 +67,35 @@ classDiagram
 
 ```ts
 async handle(raw: unknown) {
-  const ev = await this.events.save(toWebhookEvent(raw, this.payos.verify(raw)));   // luôn lưu
-  if (!ev.signatureValid) return this.mark(ev, 'INVALID_SIGNATURE');
-  if (!isSuccess(raw)) return this.mark(ev, 'IGNORED');
-  const order = await this.orders.findOneBy({ payosOrderCode: ev.orderCode });
-  if (!order) return this.mark(ev, 'UNKNOWN_ORDER');
-  if (ev.amountVnd !== order.amountVnd) return this.mark(ev, 'AMOUNT_MISMATCH');
+  const valid = await this.payos.verify(raw);                          // SDK: HMAC-SHA256 trên data
+  const f = readFields(raw);                                           // sai kiểu → null
+  const initial = !valid ? 'INVALID_SIGNATURE' : !usable(f) ? 'IGNORED' : 'RECEIVED';
+  const id = await insertEvent(f, valid, initial, raw);                // luôn lưu nguyên văn TRƯỚC
+  if (initial !== 'RECEIVED') return initial;
+  const order = await this.orders.findOneBy({ payosOrderCode: f.orderCode });
+  if (!order) return this.mark(id, 'UNKNOWN_ORDER');
+  if (order.status === 'PENDING' && f.amountVnd !== order.amountVnd)  // chỉ xét order PENDING (§1 dòng 5)
+    return this.mark(id, 'AMOUNT_MISMATCH');
   try {
-    await this.dataSource.transaction(async (m) => {
-      await m.update(WebhookEvent, ev.id, { result: order.status === 'PENDING' ? 'PAID' : 'LATE' }); // unique → trùng
-      const won = await this.capture.capture(m, order, ev);            // UPDATE ... WHERE status='PENDING'
-      if (!won) await this.capture.recordLate(m, order, ev);           // CANCELLED, hoặc vừa đổi
+    return await this.dataSource.transaction(async (m) => {
+      if (order.status === 'PENDING' && (await this.capture.capture(m, order, paid))) {
+        await m.query(SET_RESULT, [id, 'PAID']);                       // unique → trùng reference
+        return 'PAID';
+      }
+      await m.query(SET_RESULT, [id, 'LATE']);                         // CANCELLED, PAID reference khác, vừa thua lệnh hủy
+      await this.capture.recordLate(m, order, paid);                   // số THỰC NHẬN
+      return 'LATE';
     });
   } catch (e) {
-    if (isUniqueViolation(e, 'ux_webhook_accepted_reference')) return this.mark(ev, 'DUPLICATE');
+    if (isUniqueViolation(e, 'ux_webhook_accepted_reference')) return this.mark(id, 'DUPLICATE');
     throw e;                                                           // 500, payOS gửi lại
   }
 }
 ```
 
-`capture` trả `false` khi `UPDATE` 0 dòng; khi đó đọc lại order trong cùng transaction để quyết định `LATE`, đúng kết quả cuối ghi vào `result`.
+- `result` tạm `RECEIVED` giữa lúc lưu và lúc có kết quả; dòng kẹt ở `RECEIVED` nghĩa là payment dừng giữa chừng (payOS gửi lại).
+- `capture` trả `false` khi `UPDATE … WHERE status='PENDING'` đổi 0 dòng (lệnh hủy vừa thắng, hoặc webhook khác vừa `PAID`): ghi tiền đến muộn. Không cần đọc lại order: mọi trường hợp thua đều là tiền đến muộn; trường hợp webhook khác cùng `reference` vừa thắng thì index chặn ở câu ghi `result` → `DUPLICATE`.
+- Sai số tiền chỉ xét order `PENDING`; order `CANCELLED`/`PAID` ghi tiền đến muộn với số thực nhận (`API_Spec §1` dòng 5, 8, 9; `§7` mục 2).
 
 ## 4. Test bắt buộc
 

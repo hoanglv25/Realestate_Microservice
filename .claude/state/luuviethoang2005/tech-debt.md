@@ -1,6 +1,6 @@
 ---
 dev: luuviethoang2005
-updated: 2026-11-21 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T3.2: thêm #21)
+updated: 2026-11-22 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T3.2: thêm #21; T3.4a: thêm #22, #23)
 ---
 
 ## Nợ kỹ thuật
@@ -32,3 +32,5 @@ updated: 2026-11-21 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T
 | 21 | T3.2: `test/rental.infra-spec.ts` và `dto/*.ts` viết sau code, không thấy RED trước; một ca `env.validation.spec` (URL nội bộ sai) thêm cùng lúc với code | Thấp | `services/rental/test/rental.infra-spec.ts` | S | accepted | Unit của lock, client, saga, lịch xem, handler, `rental.env` đã RED trước. Bù: cố ý bỏ hủy lịch xem và điều kiện `PENDING_PAYMENT` trong handler → 2 test hạ tầng đỏ, trả lại thì xanh (2026-11-21) |
 
 Trước Phase 7, A đọc gộp `state/*/tech-debt.md` để đưa vào mục "Hạn chế" của báo cáo.
+| 22 | T3.4a: `test/payos-webhook.infra-spec.ts` viết sau code, không thấy RED trước | Thấp | `services/payment/test/payos-webhook.infra-spec.ts` | S | accepted | Unit của client, ví, capture, webhook, env, script đã RED trước. Bù: đột biến (kiểm số tiền trước trạng thái; bỏ `status='PENDING'` trong `UPDATE`) → test đỏ, trả lại xanh (2026-11-22) |
+| 23 | Webhook công khai: mỗi request (kể cả rác, sai chữ ký) ghi một dòng `payos_webhook_events`; SDK so chữ ký bằng `!==` (không constant-time) | Thấp | `services/payment/src/payment/services/webhook.service.ts`, SDK `@payos/node` | M | accepted | Lưu nguyên văn trước mọi kiểm tra là thiết kế (`API_Spec §1` dòng 1). Giới hạn bởi rate limit IP của gateway (100/60 giây, tech-debt #6, #7). Hướng: dọn bảng theo tuổi + `result` (job), hoặc chặn body không có `signature` trước khi lưu. Ghi "Hạn chế" báo cáo |
