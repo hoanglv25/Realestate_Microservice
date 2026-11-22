@@ -2,6 +2,7 @@ import { checkPaymentEnv } from './payment.env';
 
 const full = {
   DATABASE_URL: 'postgres://payment_user:x@localhost:5433/payment_db',
+  RABBITMQ_URL: 'amqp://u:p@localhost:5672/',
   PAYOS_CLIENT_ID: 'client-id',
   PAYOS_API_KEY: 'api-key',
   PAYOS_CHECKSUM_KEY: 'checksum-key',
@@ -20,16 +21,21 @@ describe('checkPaymentEnv', () => {
     expect(checkPaymentEnv({ ...rest, JWT_PUBLIC_KEY: '-----BEGIN PUBLIC KEY-----' })).toEqual([]);
   });
 
-  it.each(['DATABASE_URL', 'PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY', 'JWT_ISSUER'])(
-    'thiếu %s: báo đúng tên biến',
-    (name) => {
-      const env: Record<string, unknown> = { ...full };
-      delete env[name];
-      const errors = checkPaymentEnv(env);
-      expect(errors).toHaveLength(1);
-      expect(errors[0]).toContain(name);
-    },
-  );
+  // RABBITMQ_URL (T3.4a): webhook phát payment.deposited qua outbox
+  it.each([
+    'DATABASE_URL',
+    'RABBITMQ_URL',
+    'PAYOS_CLIENT_ID',
+    'PAYOS_API_KEY',
+    'PAYOS_CHECKSUM_KEY',
+    'JWT_ISSUER',
+  ])('thiếu %s: báo đúng tên biến', (name) => {
+    const env: Record<string, unknown> = { ...full };
+    delete env[name];
+    const errors = checkPaymentEnv(env);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain(name);
+  });
 
   it('chuỗi rỗng hoặc toàn khoảng trắng coi như thiếu', () => {
     const errors = checkPaymentEnv({ ...full, PAYOS_API_KEY: '   ', PAYOS_CHECKSUM_KEY: '' });

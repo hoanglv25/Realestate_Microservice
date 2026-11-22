@@ -1,4 +1,5 @@
-import { APIError, ConnectionTimeoutError } from '@payos/node';
+import { APIError, ConnectionTimeoutError, PayOS } from '@payos/node';
+import { NodeCryptoProvider } from '@payos/node/lib/crypto/node-crypto';
 import { PayosClient } from './payos.client';
 
 const CONFIG = {
@@ -19,13 +20,16 @@ const LINK = {
   qrCode: '000201...',
 };
 
+const CHECKSUM_KEY = 'checksum-key-chi-de-test';
+
 function setup() {
   const requests = {
     create: jest.fn().mockResolvedValue(LINK),
     cancel: jest.fn().mockResolvedValue({ id: 'link-1', status: 'CANCELLED' }),
   };
   const logger = { setContext: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() };
-  const client = new PayosClient(requests, CONFIG, logger as never);
+  const webhooks = new PayOS({ clientId: 'c', apiKey: 'a', checksumKey: CHECKSUM_KEY }).webhooks;
+  const client = new PayosClient(requests, CONFIG, logger as never, webhooks);
   return { client, requests, logger };
 }
 
@@ -107,5 +111,55 @@ describe('PayosClient.cancelLink', () => {
     requests.cancel.mockRejectedValue(new ConnectionTimeoutError());
     expect(await codeOf(client.cancelLink(100001))).toBe('503 PAYMENT_PROVIDER_UNAVAILABLE');
     expect(logger.warn.mock.calls[0][0]).toMatchObject({ op: 'cancelLink', orderCode: 100001 });
+  });
+});
+
+describe('PayosClient.verify (chữ ký webhook, SDK thật)', () => {
+  const data = {
+    orderCode: 100001,
+    amount: 3_000_000,
+    description: 'DC100001',
+    accountNumber: '4025072005',
+    reference: 'FT25326000001',
+    transactionDateTime: '2026-11-22 22:40:00',
+    currency: 'VND',
+    paymentLinkId: 'link-1',
+    code: '00',
+    desc: 'success',
+  };
+  const signed = async (d: object, key = CHECKSUM_KEY) => ({
+    code: '00',
+    desc: 'success',
+    success: true,
+    data: d,
+    signature: await new NodeCryptoProvider().createSignatureFromObj(d, key),
+  });
+
+  it('chữ ký đúng (ký bằng PAYOS_CHECKSUM_KEY) -> true', async () => {
+    const { client } = setup();
+    expect(await client.verify(await signed(data))).toBe(true);
+  });
+
+  it('chữ ký bằng khóa khác -> false, log warn chỉ có lý do, không có body', async () => {
+    const { client, logger } = setup();
+    expect(await client.verify(await signed(data, 'khoa-khac'))).toBe(false);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(logger.warn.mock.calls[0])).not.toMatch(/4025072005|FT25326000001/);
+  });
+
+  it('data bị sửa sau khi ký (số tiền) -> false', async () => {
+    const { client } = setup();
+    const body = await signed(data);
+    expect(await client.verify({ ...body, data: { ...data, amount: 1 } })).toBe(false);
+  });
+
+  it.each([
+    ['không phải object', 'abc'],
+    ['null', null],
+    ['thiếu data', { code: '00', signature: 'x' }],
+    ['thiếu signature', { code: '00', data }],
+  ])('body hỏng (%s) -> false, không ném lỗi', async (_, raw) => {
+    const { client } = setup();
+    expect(await client.verify(raw)).toBe(false);
   });
 });

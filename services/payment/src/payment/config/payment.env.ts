@@ -5,11 +5,13 @@ import Joi from 'joi';
  * Gọi từ env.bootstrap.ts khi khởi động (bỏ qua khi NODE_ENV=test để các test chung của template chạy được
  * không cần DB; test của payment tự đặt đủ biến). Cùng cách làm với `listing.env.ts`.
  *
- * T3.1 cần DB và payOS. Khóa công khai JWT bắt buộc từ đầu vì payment có route cho người dùng
+ * T3.1 cần DB và payOS; T3.4a thêm RabbitMQ (phát sự kiện từ webhook). Khóa công khai JWT bắt buộc từ đầu vì payment có route cho người dùng
  * (rút tiền, lịch sử giao dịch, T3.6) và route quản trị; webhook payOS là `@Public` (T3.4).
  */
 export const paymentRequiredSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
+  // T3.4a: webhook phát payment.deposited, payment.late-payment-credited qua outbox (MessagingModule)
+  RABBITMQ_URL: Joi.string().required(),
   PAYOS_CLIENT_ID: Joi.string().required(),
   PAYOS_API_KEY: Joi.string().required(),
   PAYOS_CHECKSUM_KEY: Joi.string().required(),

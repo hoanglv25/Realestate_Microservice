@@ -1,4 +1,10 @@
-import type { CreatePaymentLinkRequest, CreatePaymentLinkResponse, PaymentLink } from '@payos/node';
+import type {
+  CreatePaymentLinkRequest,
+  CreatePaymentLinkResponse,
+  PaymentLink,
+  Webhook,
+  WebhookData,
+} from '@payos/node';
 import { PinoLogger } from 'nestjs-pino';
 import { providerUnavailable } from '../errors/payment.errors';
 
@@ -9,6 +15,11 @@ export interface PayosPaymentRequests {
     options?: { maxRetries?: number },
   ): Promise<CreatePaymentLinkResponse>;
   cancel(orderCode: number, cancellationReason?: string): Promise<PaymentLink>;
+}
+
+/** Phần SDK `@payos/node` dùng cho webhook (`payOS.webhooks`): kiểm chữ ký bằng `PAYOS_CHECKSUM_KEY`. */
+export interface PayosWebhooks {
+  verify(webhook: Webhook): Promise<WebhookData>;
 }
 
 export interface PayosClientConfig {
@@ -34,6 +45,8 @@ export interface PaymentLinkInfo {
 
 /** Token DI của phần SDK (module dựng `new PayOS(...).paymentRequests`). */
 export const PAYOS_PAYMENT_REQUESTS = Symbol('PAYOS_PAYMENT_REQUESTS');
+/** Token DI của phần webhook SDK (module dựng `new PayOS(...).webhooks`). */
+export const PAYOS_WEBHOOKS = Symbol('PAYOS_WEBHOOKS');
 /** Token DI của cấu hình. */
 export const PAYOS_CLIENT_CONFIG = Symbol('PAYOS_CLIENT_CONFIG');
 
@@ -49,12 +62,15 @@ const ITEM_FALLBACK = 'Đặt cọc';
  *   (idempotent, chốt 2026-11-16).
  * - Mọi lỗi (mạng, timeout, 5xx, payOS từ chối với `code ≠ '00'`) thành `503 PAYMENT_PROVIDER_UNAVAILABLE`.
  *   Log `warn` chỉ ghi thao tác, `orderCode`, tên lỗi, HTTP status và mã payOS; không ghi thông điệp gốc hay khóa.
+ * - Kiểm chữ ký webhook (`verify`) bằng SDK: ký lại `data` (sắp khóa, HMAC-SHA256 với `PAYOS_CHECKSUM_KEY`) và so
+ *   với `signature`. Không gọi mạng.
  */
 export class PayosClient {
   constructor(
     private readonly requests: PayosPaymentRequests,
     private readonly config: PayosClientConfig,
     private readonly logger: PinoLogger,
+    private readonly webhooks: PayosWebhooks,
   ) {
     this.logger.setContext(PayosClient.name);
   }
@@ -94,6 +110,29 @@ export class PayosClient {
       await this.requests.cancel(orderCode, 'Hết hạn giữ chỗ hoặc hủy đơn');
     } catch (err) {
       throw this.unavailable('cancelLink', orderCode, err);
+    }
+  }
+
+  /**
+   * `true` khi body webhook có chữ ký hợp lệ. Mọi trường hợp khác (sai chữ ký, `data` bị sửa, thiếu trường, body
+   * không phải object) trả `false`, không ném: webhook vẫn được lưu và trả `200` (`RE.PAYMENT/API_Spec.md §1`).
+   * Log `warn` chỉ ghi lý do của SDK, không ghi body (có số tài khoản người chuyển).
+   */
+  async verify(raw: unknown): Promise<boolean> {
+    if (typeof raw !== 'object' || raw === null) {
+      this.logger.warn(
+        { op: 'verifyWebhook', reason: 'body không phải object' },
+        'Webhook payOS sai chữ ký',
+      );
+      return false;
+    }
+    try {
+      await this.webhooks.verify(raw as Webhook);
+      return true;
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'không rõ';
+      this.logger.warn({ op: 'verifyWebhook', reason }, 'Webhook payOS sai chữ ký');
+      return false;
     }
   }
 
