@@ -7,7 +7,7 @@
 | **Quy tắc** | BR-04, BR-05, BR-06, BR-07, BR-09, BR-18 |
 | **Quyết định** | ADR-0004 (saga tại rental), ADR-0005 (bản chụp), ADR-0009 (payOS) |
 | **CSDL** | `rental_db`: `deposits`, `saga_log`, `outbox_events`, `processed_events`; Redis (khóa theo tin, idempotency) |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. `POST /api/v1/deposits`
 
@@ -99,7 +99,7 @@ Các sự kiện khác của payment: `RE.DEPOSIT_LIFECYCLE`.
 | `LISTING_CALL_TIMEOUT_MS` | `2000` | `timeoutMs` cho lời gọi listing | A2 (2026-11-12) |
 | `PAYMENT_CALL_TIMEOUT_MS` | `3000` `[cần đo]` | Phải để tổng ≤ 8 giây; chốt sau khi đo E1, E2 | A2 (2026-11-12) |
 | `HOLD_EXPIRY_INTERVAL_MS` | `5000` | Chu kỳ `HoldExpiryJob`; E4 cần ≤ 10 giây | Chốt 2026-11-16 |
-| `SAGA_RECONCILE_INTERVAL_MS`, `SAGA_STUCK_AFTER_SECONDS` | `15000`, `30` | `SagaReconcileJob` | Chốt 2026-11-16 |
+| `SAGA_RECONCILE_INTERVAL_MS`, `SAGA_STUCK_AFTER_SECONDS` | `15000`, `30` | `SagaReconcileJob`; `SAGA_RECONCILE_INTERVAL_MS=0` tắt lịch (test gọi `runOnce`) | Chốt 2026-11-16; `0` thêm 2026-11-22 |
 
 `.env` gốc đang có `DEPOSIT_PAYMENT_TTL_SECONDS`, `RESERVATION_TTL_SECONDS`, `PAYMENT_CLAIM_TTL_SECONDS`, `ADMIN_SLA_SECONDS` của luồng cũ → bỏ, thay bằng `HOLD_TTL_SECONDS` và các biến `_SECONDS` ở `RE.DEPOSIT_LIFECYCLE §6` (A3).
 
@@ -165,4 +165,6 @@ CREATE INDEX ix_saga_log_deposit ON saga_log (deposit_id, created_at);
 
 ## 8. Điểm [cần xác nhận]
 
-1. **[cần xác nhận] `409 LISTING_INVALID_STATUS` khi rental đẩy đích `AVAILABLE` (nhả chỗ, bù trừ, hết hạn).** Listing (`RE.LISTING/API_Spec.md §2.2`, v1.4) trả `200` khi tin đã `AVAILABLE`, và `409 LISTING_INVALID_STATUS` kèm `details { current, target }` khi tin đang `HELD`/`DEPOSITED`/`RENTED` thuộc đơn **khác** (chỗ đã giao cho người khác, hoặc đơn này đã mất quyền trên tin). Đề xuất cho rental: coi `409` này là **kết cục cuối**, không retry. `ListingSyncService.push` đặt `listing_synced_at = now()`, ghi `saga_log` `BUSINESS_ERROR` và log `warn` kèm `details`; job (b) không nhặt lại (hiện ghi "đẩy lại tới khi xong", test 17). Chỉ `503`/`504`/lỗi kết nối mới đẩy lại. Chưa chốt → rental sẽ lặp vô hạn trên một tin không còn thuộc đơn. Xử lý ở T3.x (C, T3.3 đồng bộ listing); **không sửa rental ở T2.3**. Sổ: `implementation/van-de-can-quyet-dinh.md` C20.
+_Không còn điểm mở._ Mục 1 dưới đây **đã chốt 2026-11-22 (A, C20): theo đề xuất**, mở rộng cho mọi 4xx của listing (B1). Làm ở T3.3 (`ListingSyncService`).
+
+1. ~~**[cần xác nhận]**~~ **(đã chốt)** **`409 LISTING_INVALID_STATUS` khi rental đẩy đích `AVAILABLE` (nhả chỗ, bù trừ, hết hạn).** Listing (`RE.LISTING/API_Spec.md §2.2`, v1.4) trả `200` khi tin đã `AVAILABLE`, và `409 LISTING_INVALID_STATUS` kèm `details { current, target }` khi tin đang `HELD`/`DEPOSITED`/`RENTED` thuộc đơn **khác** (chỗ đã giao cho người khác, hoặc đơn này đã mất quyền trên tin). Đề xuất cho rental: coi `409` này là **kết cục cuối**, không retry. `ListingSyncService.push` đặt `listing_synced_at = now()`, ghi `saga_log` `BUSINESS_ERROR` và log `warn` kèm `details`; job (b) không nhặt lại (hiện ghi "đẩy lại tới khi xong", test 17). Chỉ `503`/`504`/lỗi kết nối mới đẩy lại. Chưa chốt → rental sẽ lặp vô hạn trên một tin không còn thuộc đơn. Xử lý ở T3.x (C, T3.3 đồng bộ listing); **không sửa rental ở T2.3**. Sổ: `implementation/van-de-can-quyet-dinh.md` C20.

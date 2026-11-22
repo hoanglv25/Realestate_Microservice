@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/rental/src/rental/` |
 | **Quy ước** | `standards/coding-convention.md §4`, `standards/reliability-standard.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. Cấu trúc
 
@@ -136,6 +136,12 @@ private async createOrder(d: Deposit) {
 
 Không gọi hủy order: chỉ gọi khi tạo order đã `BUSINESS_ERROR`/`NOT_EXECUTED` nên order chưa tồn tại. Nhánh `UNKNOWN` do job xử lý (§7).
 
+Chốt khi làm T3.3 (2026-11-22, A duyệt):
+
+- `cancelled_reason`: `PAYMENT_ORDER_REJECTED` (payment 4xx), `PAYMENT_UNAVAILABLE` (`NOT_EXECUTED`), `PAYMENT_ORDER_NOT_FOUND` (job (a) thấy `404`).
+- `saga_log` của bước lỗi (`CREATE_PAYMENT_ORDER` + kết quả) ghi **trong** transaction bù trừ, không ghi riêng trước.
+- `ListingSyncService.push`: thành công đặt `listing_synced_at = now()` **chỉ khi** `listing_target_status` chưa đổi và chưa đánh dấu; không ghi `saga_log`. 4xx của listing (C20 và mọi 4xx khác) là kết cục cuối: đánh dấu + `saga_log SYNC_LISTING BUSINESS_ERROR` kèm `details`, cùng transaction. Lỗi tạm (`503`/`504`/kết nối) chỉ log `warn`, không ghi `saga_log` mỗi lượt.
+
 ## 6. `PaymentEventsHandler` — `payment.deposited`
 
 ```ts
@@ -165,6 +171,8 @@ Handler không gọi HTTP. Phần hủy lịch xem thêm 1 đọc đơn + 1 `UPD
 
 Thứ tự trong `HoldExpiryJob` là BR-09: **hủy link trước, nhả chỗ sau**. Mỗi đơn lỗi không chặn đơn khác. Một bản sao rental (Báo cáo §7.2); không làm `FOR UPDATE SKIP LOCKED` (chốt 2026-11-16, ghi hạn chế: chỉ chạy một bản sao rental).
 
+Lịch chạy (T3.3): `@nestjs/schedule` **6.1.3** (`SchedulerRegistry.addInterval`; dòng 12.x là ESM thuần, không nạp được trong dự án CommonJS). Lượt trước chưa xong thì bỏ lượt mới; mỗi phần tối đa 50 đơn, cũ nhất trước. (a) gắn order: `UPDATE ... WHERE payment_order_id IS NULL` + `saga_log CREATE_PAYMENT_ORDER OK {via: reconcile}`.
+
 ## 8. Test bắt buộc
 
 Mock `ListingClient`, `PaymentClient` cho unit; Postgres + Redis thật cho test đồng thời.
@@ -187,7 +195,7 @@ Mock `ListingClient`, `PaymentClient` cho unit; Postgres + Redis thật cho test
 | 14 | `payment.deposited` hợp lệ | `PAID`, mốc 48h/72h đúng, đích `DEPOSITED`; yêu cầu xem `REQUESTED` của người khác trên tin thành `CANCELLED` (`LISTING_DEPOSITED`) |
 | 15 | `payment.deposited` giao hai lần | Một lần đổi; không hủy thêm lịch xem |
 | 16 | `payment.deposited` khi đơn `EXPIRED` | Không đổi, log `warn` |
-| 17 | Listing sync lỗi `503`/`504`/kết nối (`409 LISTING_INVALID_STATUS`: **[cần xác nhận]**, `API_Spec.md §8`) | Job (b) đẩy lại tới khi xong |
+| 17 | Listing sync lỗi `503`/`504`/kết nối | Job (b) đẩy lại tới khi xong; `409 LISTING_INVALID_STATUS` (và 4xx khác) → kết cục cuối, không đẩy lại (C20) |
 | 18 | Unique index `ux_deposits_active_listing` | Đơn hoạt động thứ hai trên cùng tin bị chặn |
 
 ## 9. Đã chốt 2026-11-16
