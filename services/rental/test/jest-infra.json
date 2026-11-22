@@ -1,0 +1,12 @@
+{
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "maxWorkers": 1,
+  "testTimeout": 30000,
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testRegex": ".infra-spec.ts$",
+  "setupFiles": ["<rootDir>/setup-infra-env.ts"],
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/../tsconfig.json" }]
+  }
+}

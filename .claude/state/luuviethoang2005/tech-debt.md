@@ -1,6 +1,6 @@
 ---
 dev: luuviethoang2005
-updated: 2026-11-21 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20)
+updated: 2026-11-21 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T3.2: thêm #21)
 ---
 
 ## Nợ kỹ thuật
@@ -29,5 +29,6 @@ updated: 2026-11-21 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20)
 | 18 | `src/config/env.bootstrap.spec.ts` chạy tiến trình thật qua ts-node: có lần đỏ khi cả bộ unit chạy song song (lần chạy lại xanh) | Thấp | `services/identity/src/config/env.bootstrap.spec.ts` (và bản chép ở template, listing nếu có) | S | open | Quan sát 2 lần 2026-11-20 (354 test), cả hai ngay sau khi chạy `test:infra` + compose đang chạy: lần 1 `env.bootstrap.spec` đỏ, lần 2 bốn suite vỡ vì `Jest worker encountered 4 child process exceptions` (tests đều không fail). Chạy lại 4 lần liên tiếp đều 354/354 xanh. Chưa xác định được nguyên nhân (nghi thiếu tài nguyên máy khi nhiều tiến trình), nên không đoán; nếu lặp lại: gom thông tin theo `debug` Bước 1 (tái hiện), thử `--runInBand` |
 | 19 | Test hạ tầng T2.5 viết sau code ở vài chỗ (`otp.store`, `otp.infra-spec`), không thấy RED trước | Thấp | `services/identity/test/otp.store.infra-spec.ts`, `otp.infra-spec.ts` | S | accepted | Unit test (`mail`, `email-verification`, `password-reset`, `google-*`, `user-admin.lock`, `profile`, DTO, auth) đã RED trước; hai file infra này viết cùng lúc với `RedisOtpStore`/luồng OTP. Chấp nhận, ghi cho minh bạch |
 | 20 | T3.1: `payment-order.dto.spec.ts` và `test/payment-orders.infra-spec.ts` viết sau code, không thấy RED trước | Thấp | `services/payment/src/payment/dto/payment-order.dto.spec.ts`, `services/payment/test/payment-orders.infra-spec.ts` | S | accepted | `payment.env`, `env.validation`, `payos.client`, `payment-order.service` đã RED trước. Bù lại: cố ý đổi thứ tự hủy (UPDATE trước payOS) thì 3 test hạ tầng đỏ, trả lại thì xanh (2026-11-21). Số 17–19 nằm ở nhánh T2.5 |
+| 21 | T3.2: `test/rental.infra-spec.ts` và `dto/*.ts` viết sau code, không thấy RED trước; một ca `env.validation.spec` (URL nội bộ sai) thêm cùng lúc với code | Thấp | `services/rental/test/rental.infra-spec.ts` | S | accepted | Unit của lock, client, saga, lịch xem, handler, `rental.env` đã RED trước. Bù: cố ý bỏ hủy lịch xem và điều kiện `PENDING_PAYMENT` trong handler → 2 test hạ tầng đỏ, trả lại thì xanh (2026-11-21) |
 
 Trước Phase 7, A đọc gộp `state/*/tech-debt.md` để đưa vào mục "Hạn chế" của báo cáo.

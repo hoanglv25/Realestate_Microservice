@@ -1,0 +1,23 @@
+# Dockerfile.dockerignore: BuildKit dùng file này (cạnh Dockerfile) thay cho .dockerignore ở gốc,
+# vì build context là GỐC repo. Đường dẫn tính từ gốc repo.
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/openapi.json
+
+# Không bao giờ đưa bí mật vào ảnh (giữ lại .env.example làm tài liệu)
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets
+**/*.pem
+**/*.key
+
+# Phần không liên quan tới ảnh service
+.git
+.github
+.vscode
+infra
+docs
+contracts

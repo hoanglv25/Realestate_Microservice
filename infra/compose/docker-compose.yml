@@ -337,6 +337,49 @@ services:
         condition: service_healthy
     networks: [realestate-net]
 
+  # rental: lich xem, don dat coc, saga dieu phoi listing + payment (T3.2). Job bu tru, het han: T3.3, T3.4.
+  rental:
+    <<: *restart
+    build:
+      context: ../..
+      dockerfile: services/rental/Dockerfile
+    container_name: re-rental
+    profiles: [apps]
+    environment:
+      SERVICE_NAME: rental
+      PORT: '3003'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-3000}
+      HTTP_MAX_RETRIES: ${HTTP_MAX_RETRIES:-2}
+      DATABASE_URL: postgres://${RENTAL_DB_USER:?thieu RENTAL_DB_USER}:${RENTAL_DB_PASSWORD:?thieu RENTAL_DB_PASSWORD}@postgres:5432/${RENTAL_DB_NAME:?thieu RENTAL_DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?thieu REDIS_PASSWORD}@redis:6379
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:?thieu RABBITMQ_USER}:${RABBITMQ_PASSWORD:?thieu RABBITMQ_PASSWORD}@rabbitmq:5672/%2F
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-domain.events}
+      RABBITMQ_QUEUE: rental.payment-events
+      INTERNAL_LISTING_URL: http://listing:3002
+      INTERNAL_PAYMENT_URL: http://payment:3004
+      LISTING_CALL_TIMEOUT_MS: ${LISTING_CALL_TIMEOUT_MS:-2000}
+      PAYMENT_CALL_TIMEOUT_MS: ${PAYMENT_CALL_TIMEOUT_MS:-3000}
+      HOLD_TTL_SECONDS: ${HOLD_TTL_SECONDS:-600}
+      DEPOSIT_LOCK_TTL_MS: ${DEPOSIT_LOCK_TTL_MS:-10000}
+      REFUND_WINDOW_SECONDS: ${REFUND_WINDOW_SECONDS:-172800}
+      AUTO_RELEASE_SECONDS: ${AUTO_RELEASE_SECONDS:-259200}
+      # rental chi KIEM token (khoa cong khai), khong ky
+      JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public_key
+      JWT_ISSUER: ${JWT_ISSUER:?thieu JWT_ISSUER}
+    secrets: [jwt_public_key]
+    # Khong co `ports:`: goi qua api-gateway (/api/v1/deposits, /api/v1/viewings)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+    networks: [realestate-net]
+
   # payment: payment order, payOS (T3.1). Webhook payOS, RabbitMQ, ví, S3 chung tu bat o T3.4, T3.6.
   payment:
     <<: *restart

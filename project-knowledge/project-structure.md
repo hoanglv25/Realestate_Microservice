@@ -65,7 +65,7 @@ Realestate_Microservice/
 │  │     ├─ services/ listing-command, listing-query, listing-search.sql, listing-review, listing-image, listing-hold (+ .rules)
 │  │     └─ dto/ entities/ errors/ seed/
 │  │
-│  ├─ rental/                         + cổng 3003, rental_db + Redis (RE.VIEWING, RE.DEPOSIT_SAGA, RE.DEPOSIT_LIFECYCLE)
+│  ├─ rental/                         ✓ T3.2 (lịch xem, saga luồng thành công, payment.deposited); + T3.3–T3.5. Cổng 3003, rental_db + Redis (RE.VIEWING, RE.DEPOSIT_SAGA, RE.DEPOSIT_LIFECYCLE)
 │  │  └─ src/rental/
 │  │     ├─ controllers/ deposits, deposits.admin, deposits.internal, viewings
 │  │     ├─ services/ deposit-saga, compensation, listing-sync, deposit-lifecycle, deposit-query, viewing

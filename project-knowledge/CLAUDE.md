@@ -188,6 +188,7 @@
 | `guides/RE_Listing_Code_Walkthrough.md` | Hiểu `services/listing` (CRUD sản phẩm bằng `UPDATE ... WHERE`, duyệt, ảnh presigned PUT + `HeadObject`, quy tắc duyệt lại khi sửa, khóa dòng khi đếm ảnh, tìm kiếm PostGIS `ST_DWithin` + bộ dựng SQL, API nội bộ giữ chỗ nguyên tử và đổi trạng thái theo đơn, seed 30 tin Hà Nội); thêm bộ lọc hoặc sửa luật giữ chỗ; vấn đáp listing |
 | `guides/RE_Identity_Code_Walkthrough.md` | Hiểu `services/identity` (đăng ký + xác minh OTP qua Mailpit, đăng nhập theo trạng thái, quên mật khẩu, Google, khóa tài khoản, `PATCH /users/me`, refresh token xoay vòng và `revokeAllForUser`, tài khoản nhận tiền mã hóa AES-GCM, API nội bộ cho payment, danh sách người dùng, seed 3 chủ trọ và 5 người thuê); vấn đáp identity |
 | `guides/RE_Payment_Code_Walkthrough.md` | Hiểu `services/payment` (T3.1: payment order idempotent theo `depositId`, INSERT trước khi gọi payOS, `PayosClient` không retry tạo link, hủy bằng `UPDATE ... WHERE status='PENDING'` đua với webhook, migration ví); thêm webhook (T3.4) hoặc payout (T3.6); vấn đáp payment |
+| `guides/RE_Rental_Code_Walkthrough.md` | Hiểu `services/rental` (T3.2: saga đặt cọc luồng thành công với khóa Redis theo tin, giữ chỗ trước khi ghi đơn, `saga_log` + `CallOutcome`, `@Idempotent()`; lịch xem 5 route; nghe `payment.deposited` qua `EventConsumer`); làm bù trừ, job (T3.3, T3.4), vòng đời đơn (T3.5); vấn đáp saga |
 
 ### 2.6 Kế hoạch triển khai
 
