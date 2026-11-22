@@ -114,6 +114,8 @@ describe('validateEnv', () => {
       PAYMENT_CALL_TIMEOUT_MS: 3000,
       REFUND_WINDOW_SECONDS: 172800,
       AUTO_RELEASE_SECONDS: 259200,
+      SAGA_RECONCILE_INTERVAL_MS: 15000,
+      SAGA_STUCK_AFTER_SECONDS: 30,
     });
     expect(validateEnv({ SERVICE_NAME: 'rental', HOLD_TTL_SECONDS: '60' }).HOLD_TTL_SECONDS).toBe(
       60,
@@ -126,6 +128,19 @@ describe('validateEnv', () => {
     );
     expect(() => validateEnv({ SERVICE_NAME: 'x', DEPOSIT_LOCK_TTL_MS: '0' })).toThrow(
       /DEPOSIT_LOCK_TTL_MS/,
+    );
+  });
+
+  it('rental T3.3: SAGA_RECONCILE_INTERVAL_MS = 0 tắt job (test); âm hoặc không phải số bị từ chối; SAGA_STUCK_AFTER_SECONDS ≥ 1', () => {
+    expect(
+      validateEnv({ SERVICE_NAME: 'rental', SAGA_RECONCILE_INTERVAL_MS: '0' })
+        .SAGA_RECONCILE_INTERVAL_MS,
+    ).toBe(0);
+    expect(() => validateEnv({ SERVICE_NAME: 'x', SAGA_RECONCILE_INTERVAL_MS: '-1' })).toThrow(
+      /SAGA_RECONCILE_INTERVAL_MS/,
+    );
+    expect(() => validateEnv({ SERVICE_NAME: 'x', SAGA_STUCK_AFTER_SECONDS: '0' })).toThrow(
+      /SAGA_STUCK_AFTER_SECONDS/,
     );
   });
 });
