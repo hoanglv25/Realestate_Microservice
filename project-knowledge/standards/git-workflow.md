@@ -36,6 +36,7 @@ docs(design): chốt đường dẫn API listing
 - Một commit một ý. Chỉ `git add` file liên quan.
 - Ghi mã task trong ngoặc ở cuối dòng tiêu đề.
 - Không commit: `.env`, `secrets/`, `node_modules`, `dist`, code chưa build được.
+- Không thêm dòng ghi công AI vào commit hay mô tả PR: không `Co-Authored-By: Claude …`, không `Claude-Session: …`, không "Generated with Claude Code" (A chốt 2026-11-22). Cấu hình ở `.claude/settings.json` (`attribution.commit`, `attribution.pr` để trống). Commit cũ giữ nguyên, không viết lại lịch sử.
 
 ## 3. Pull request
 
