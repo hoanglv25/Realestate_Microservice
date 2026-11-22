@@ -2,6 +2,36 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v1.3] — 2026-11-22
+
+- **type:** MINOR
+- **author:** hoang.lv (A duyệt kế hoạch T3.4a cùng Claude)
+- **summary:** Khớp mã giả webhook với bảng `API_Spec §1`; chốt các chi tiết làm T3.4a. Không đổi route, mã lỗi, hợp đồng.
+
+### Thay đổi
+
+**1. Sai số tiền chỉ xét order `PENDING`.**
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `Component_Class_Design.md` §3 | Sửa mã giả |
+
+- **Cũ:** mã giả kiểm số tiền **trước** khi xét trạng thái order (order `CANCELLED` sai tiền thành `AMOUNT_MISMATCH`).
+- **Mới:** đúng `API_Spec §1` dòng 5, 8, 9 và `§7` mục 2: chỉ order `PENDING` bị `AMOUNT_MISMATCH`; `CANCELLED`/`PAID` ghi tiền đến muộn với số thực nhận. Trong transaction `UPDATE` order trước, ghi `result` sau; thua lệnh hủy → `LATE` (không đọc lại order).
+- **Lý do:** hai tài liệu lệch nhau; `API_Spec` cụ thể hơn và đúng BR-10 (tiền đã vào tài khoản phải được hoàn). A chốt 2026-11-22.
+
+**2. Chi tiết webhook.**
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `API_Spec.md` §1 | Thêm |
+| 2 | `API_Spec.md` §1.2 | Sửa thứ tự |
+| 3 | `API_Spec.md` §5 | Sửa |
+| 4 | `Processing_Flow.md` §6 | Sửa |
+
+- **Mới:** body `200` cố định `{received: true}`; `result` tạm `RECEIVED`; `paidAt` = `transactionDateTime` giờ VN; tiền đến muộn ghi yêu cầu hoàn trước `late_payments` (8 truy vấn thay vì 9); `RABBITMQ_URL` bắt buộc với payment; bảng số truy vấn theo nhánh, nhánh đua 9 (A chấp nhận).
+- **Lý do:** thiết kế chưa nêu; A duyệt kế hoạch T3.4a 2026-11-22.
+
 ## [v1.2] — 2026-11-21
 
 - **type:** PATCH
