@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Đặt cọc thành công, bù trừ, hết hạn giữ chỗ, đối soát, bảng xử lý từng điểm lỗi |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0004, Báo cáo v2 Hình 3.9–3.11, Bảng 4.9 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
 
 ## 1. Luồng thành công
 
@@ -70,7 +70,7 @@ Ba lớp chặn (Báo cáo §3.2.1, Bảng 4.9):
 | Tạo order | Từ chối kết nối | Chưa thực hiện | `cancelAfterHold` | `503` | `CANCELLED` |
 | Tạo order | Timeout, `5xx` | Chưa biết | `saga_log UNKNOWN`; job (a) đối soát | `504` | `PENDING_PAYMENT` |
 | Nhả chỗ (bù trừ) | listing lỗi (`503`/`504`/kết nối) | | `listing_target_status` giữ, job (b) đẩy lại | Như lỗi gốc | `CANCELLED` |
-| Nhả chỗ (bù trừ) | listing `409 LISTING_INVALID_STATUS` | **[cần xác nhận]** `API_Spec.md §8` | Đề xuất: kết cục cuối, không retry, đánh dấu đã đồng bộ, `saga_log BUSINESS_ERROR`, log `warn` | Như lỗi gốc | `CANCELLED` |
+| Nhả chỗ (bù trừ) | listing 4xx (`409 LISTING_INVALID_STATUS`, `404`, `400`) | Kết cục cuối (C20, chốt 2026-11-22) | Không retry, đánh dấu đã đồng bộ, `saga_log SYNC_LISTING BUSINESS_ERROR` kèm `details`, log `warn` | Như lỗi gốc | `CANCELLED` |
 | Rental chết giữa saga | | | Khởi động lại: job (a) hoặc `HoldExpiryJob` xử lý | Mất kết nối | Kết quả cuối |
 | Hết 10 phút | | | Hủy link → `EXPIRED` → nhả chỗ | — | `EXPIRED` |
 | Hết 10 phút, payment báo đã `PAID` | | Đua với webhook | Bỏ qua, chờ `payment.deposited` | — | `PAID` |
@@ -112,4 +112,4 @@ Link bị hủy **trước** khi nhả chỗ, nên người thuê không trả �
 
 ## 6. Số truy vấn
 
-`POST /deposits` so với ngưỡng ghi 6 của `non-functional-standards.md`: insert đơn + `saga_log` + outbox (3) và cập nhật order + `saga_log` (2), cộng đọc lại khi idempotent. Tổng 5–6, trong ngưỡng. Lời gọi liên service: 3 (snapshot, hold, create order), hằng số.
+`POST /deposits` so với ngưỡng ghi 6 của `non-functional-standards.md`: insert đơn + `saga_log` + outbox (3) và cập nhật order + `saga_log` (2), cộng đọc lại khi idempotent. Tổng 5–6, trong ngưỡng. **Nhánh bù trừ** (tạo order `BUSINESS_ERROR`/`NOT_EXECUTED`): 3 + bù trừ (`UPDATE` đơn, `saga_log`, outbox) 3 + đánh dấu đã đẩy `AVAILABLE` 1 = **7**, A chấp nhận 2026-11-22. `SagaReconcileJob` mỗi lượt: 2 `SELECT` (≤ 50 đơn mỗi phần); mỗi đơn (a) gắn order 2, (b) đẩy thành công 1, C20 2. Lời gọi liên service: 3 (snapshot, hold, create order), hằng số.

@@ -1,9 +1,7 @@
-import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
-import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
-import { getCorrelationId } from '../../common/logging/correlation-id.middleware';
 import { OutboxService } from '../../messaging/outbox.service';
 import { classifyCall } from '../clients/call-outcome';
 import { ListingClient } from '../clients/listing.client';
@@ -12,9 +10,10 @@ import type { CreatedOrder } from '../clients/payment.client';
 import { DepositCreatedDto } from '../dto/deposit.dto';
 import { Deposit } from '../entities/deposit.entity';
 import { SagaLog } from '../entities/saga-log.entity';
-import type { SagaOutcome, SagaStep } from '../entities/saga-log.entity';
 import { isUniqueViolation, listingNotAvailable } from '../errors/rental.errors';
 import { ListingLock } from '../locks/listing.lock';
+import { CompensationService } from './compensation.service';
+import { errorDetail, sagaLogRow } from './saga-log';
 
 export interface DepositSagaConfig {
   /** `HOLD_TTL_SECONDS` (BR-07). */
@@ -23,15 +22,6 @@ export interface DepositSagaConfig {
 export const DEPOSIT_SAGA_CONFIG = Symbol('DEPOSIT_SAGA_CONFIG');
 
 const ACTIVE_UNIQUE = 'ux_deposits_active_listing';
-
-/** Chi tiết lỗi ghi vào `saga_log.detail`: chỉ mã và HTTP status, không dữ liệu cá nhân. */
-function errorDetail(err: unknown): Record<string, unknown> {
-  if (err instanceof HttpException) {
-    const res = err.getResponse() as { code?: unknown } | string;
-    return { code: typeof res === 'object' ? res.code : undefined, status: err.getStatus() };
-  }
-  return { error: (err as { name?: string } | null)?.name ?? 'Error' };
-}
 
 /**
  * Saga đặt cọc điều phối tại rental (ADR-0004, `RE.DEPOSIT_SAGA/API_Spec.md §1`, `Component_Class_Design.md §4`).
@@ -42,9 +32,11 @@ function errorDetail(err: unknown): Record<string, unknown> {
  * Giữ chỗ trước khi tạo đơn: giữ chỗ không rõ kết quả thì chưa có đơn nào để dọn, `held_until` tự hết.
  * Tạo đơn trước khi gọi payment: rental chết sau khi payment tạo link thì đơn trong DB là manh mối cho job.
  *
- * T3.2 là luồng thành công. Tạo order lỗi: ghi `saga_log` theo `CallOutcome` rồi trả lỗi; bù trừ
- * (`CompensationService`), đối soát (`SagaReconcileJob`) thuộc T3.3 (`implementation/PHASE-3.md`).
- * Truy vấn: 5 (INSERT đơn, `saga_log`, outbox; UPDATE order, INSERT `saga_log`).
+ * Tạo order lỗi (T3.3, `Component_Class_Design §4, §5`): payment chắc chắn chưa có order (`BUSINESS_ERROR`,
+ * `NOT_EXECUTED`) → bù trừ (`CompensationService`: đơn `CANCELLED`, tin về `AVAILABLE`) rồi ném lỗi gốc; không rõ
+ * (`UNKNOWN`: timeout, 5xx) → `saga_log UNKNOWN`, đơn giữ `PENDING_PAYMENT`, `SagaReconcileJob` (a) đối soát.
+ * Truy vấn: thành công 5 (INSERT đơn, `saga_log`, outbox; UPDATE order, INSERT `saga_log`); nhánh bù trừ 7 (3 +
+ * bù trừ 3 + đánh dấu đã đẩy 1, A chấp nhận 2026-11-22).
  */
 @Injectable()
 export class DepositSagaService {
@@ -58,6 +50,7 @@ export class DepositSagaService {
     private readonly payment: PaymentClient,
     private readonly outbox: OutboxService,
     @Inject(DEPOSIT_SAGA_CONFIG) private readonly config: DepositSagaConfig,
+    @Inject(CompensationService) private readonly compensation: CompensationService,
   ) {}
 
   async start(tenantId: string, listingId: string): Promise<DepositCreatedDto> {
@@ -84,7 +77,7 @@ export class DepositSagaService {
       try {
         await this.dataSource.transaction(async (m) => {
           await m.insert(Deposit, deposit);
-          await m.insert(SagaLog, this.log(depositId, 'HOLD_LISTING', 'OK'));
+          await m.insert(SagaLog, sagaLogRow(depositId, 'HOLD_LISTING', 'OK'));
           await this.outbox.add(m, 'rental.deposit-created', {
             depositId,
             listingId,
@@ -117,7 +110,7 @@ export class DepositSagaService {
     }
   }
 
-  /** Bước 6–7. Lỗi: `saga_log` theo `CallOutcome` (C14), rồi ném nguyên lỗi (bù trừ ở T3.3). */
+  /** Bước 6–7. Lỗi: theo `CallOutcome` (C14) — bù trừ hoặc `saga_log UNKNOWN` — rồi ném nguyên lỗi. */
   private async createOrder(d: Deposit): Promise<CreatedOrder> {
     let order: CreatedOrder;
     try {
@@ -131,8 +124,23 @@ export class DepositSagaService {
       });
     } catch (err) {
       const outcome = classifyCall(err);
+      if (outcome === 'BUSINESS_ERROR' || outcome === 'NOT_EXECUTED') {
+        // Payment chắc chắn chưa có order: bù trừ ngay (saga_log nằm trong transaction bù trừ)
+        await this.compensation
+          .cancelAfterHold(d, {
+            step: 'CREATE_PAYMENT_ORDER',
+            outcome,
+            detail: errorDetail(err),
+            reason: outcome === 'BUSINESS_ERROR' ? 'PAYMENT_ORDER_REJECTED' : 'PAYMENT_UNAVAILABLE',
+          })
+          .catch((e: unknown) =>
+            // Bù trừ lỗi (DB): đơn giữ PENDING_PAYMENT, job (a) xử lý; không che lỗi gốc
+            this.logger.warn(`Bù trừ đơn ${d.id} lỗi, chờ job đối soát: ${(e as Error).message}`),
+          );
+        throw err;
+      }
       await this.sagaLogs
-        .insert(this.log(d.id, 'CREATE_PAYMENT_ORDER', outcome, errorDetail(err)))
+        .insert(sagaLogRow(d.id, 'CREATE_PAYMENT_ORDER', outcome, errorDetail(err)))
         .catch(() => this.logger.warn(`Không ghi được saga_log cho đơn ${d.id}`));
       throw err;
     }
@@ -142,7 +150,7 @@ export class DepositSagaService {
         { id: d.id },
         { paymentOrderId: order.orderId, checkoutUrl: order.checkoutUrl, qrCode: order.qrCode },
       );
-      await m.insert(SagaLog, this.log(d.id, 'CREATE_PAYMENT_ORDER', 'OK'));
+      await m.insert(SagaLog, sagaLogRow(d.id, 'CREATE_PAYMENT_ORDER', 'OK'));
     });
     return order;
   }
@@ -156,21 +164,5 @@ export class DepositSagaService {
         `Không nhả được chỗ của tin ${listingId} (đơn ${depositId}), chờ held_until hết`,
       );
     }
-  }
-
-  private log(
-    depositId: string,
-    step: SagaStep,
-    outcome: SagaOutcome,
-    detail: Record<string, unknown> | null = null,
-  ): QueryDeepPartialEntity<SagaLog> {
-    // jsonb: TypeORM không suy được kiểu sâu của Record<string, unknown>
-    return {
-      depositId,
-      step,
-      outcome,
-      detail: detail as QueryDeepPartialEntity<SagaLog>['detail'],
-      correlationId: getCorrelationId() ?? null,
-    };
   }
 }

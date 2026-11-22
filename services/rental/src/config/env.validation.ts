@@ -52,6 +52,11 @@ export interface EnvVars {
   // Mốc khi đơn PAID (RE.DEPOSIT_LIFECYCLE §6)
   REFUND_WINDOW_SECONDS: number;
   AUTO_RELEASE_SECONDS: number;
+  // SagaReconcileJob (RE.DEPOSIT_SAGA §5, §7; T3.3)
+  /** Chu kỳ job đối soát (ms); `0` tắt job (test gọi `runOnce` trực tiếp). */
+  SAGA_RECONCILE_INTERVAL_MS: number;
+  /** Đơn `PENDING_PAYMENT` chưa có order quá số giây này thì job (a) hỏi lại payment. */
+  SAGA_STUCK_AFTER_SECONDS: number;
 }
 
 const optionalString = Joi.string().trim().empty('');
@@ -132,6 +137,8 @@ export const envSchema = Joi.object<EnvVars>({
   PAYMENT_CALL_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(3000),
   REFUND_WINDOW_SECONDS: Joi.number().integer().min(10).default(172800),
   AUTO_RELEASE_SECONDS: Joi.number().integer().min(10).default(259200),
+  SAGA_RECONCILE_INTERVAL_MS: Joi.number().integer().min(0).max(3600000).default(15000),
+  SAGA_STUCK_AFTER_SECONDS: Joi.number().integer().min(1).max(86400).default(30),
 })
   // Outbox và inbox nằm trong DB của service, nên bật RabbitMQ thì bắt buộc có DB.
   .with('RABBITMQ_URL', 'DATABASE_URL')

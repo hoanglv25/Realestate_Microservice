@@ -1,6 +1,6 @@
 ---
 dev: luuviethoang2005
-updated: 2026-11-22 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T3.2: thêm #21; T3.4a: thêm #22, #23)
+updated: 2026-11-22 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T3.2: thêm #21; T3.4a: thêm #22, #23; T3.3: thêm #24)
 ---
 
 ## Nợ kỹ thuật
@@ -34,3 +34,4 @@ updated: 2026-11-22 (T2.5: #16 resolved, thêm #17, #18, #19; T3.1: thêm #20; T
 Trước Phase 7, A đọc gộp `state/*/tech-debt.md` để đưa vào mục "Hạn chế" của báo cáo.
 | 22 | T3.4a: `test/payos-webhook.infra-spec.ts` viết sau code, không thấy RED trước | Thấp | `services/payment/test/payos-webhook.infra-spec.ts` | S | accepted | Unit của client, ví, capture, webhook, env, script đã RED trước. Bù: đột biến (kiểm số tiền trước trạng thái; bỏ `status='PENDING'` trong `UPDATE`) → test đỏ, trả lại xanh (2026-11-22) |
 | 23 | Webhook công khai: mỗi request (kể cả rác, sai chữ ký) ghi một dòng `payos_webhook_events`; SDK so chữ ký bằng `!==` (không constant-time) | Thấp | `services/payment/src/payment/services/webhook.service.ts`, SDK `@payos/node` | M | accepted | Lưu nguyên văn trước mọi kiểm tra là thiết kế (`API_Spec §1` dòng 1). Giới hạn bởi rate limit IP của gateway (100/60 giây, tech-debt #6, #7). Hướng: dọn bảng theo tuổi + `result` (job), hoặc chặn body không có `signature` trước khi lưu. Ghi "Hạn chế" báo cáo |
+| 24 | T3.3: `test/saga-compensation.infra-spec.ts` viết sau code, không thấy RED trước | Thấp | `services/rental/test/saga-compensation.infra-spec.ts` | S | accepted | Unit của env, sync, bù trừ, saga, job đã RED trước. Bù: đột biến (C20 thành lỗi tạm; bỏ bù trừ; đánh dấu không kiểm đích) → test đỏ, trả lại xanh (2026-11-22) |

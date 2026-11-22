@@ -50,6 +50,7 @@ function setup() {
   };
   const dataSource = { transaction: jest.fn(async (cb: (m: unknown) => unknown) => cb(manager)) };
   const sagaLogs = { insert: track('sagaLog.insert', {}) };
+  const compensation = { cancelAfterHold: track('compensation', true) };
   const service = new DepositSagaService(
     dataSource as never,
     sagaLogs as never,
@@ -58,8 +59,20 @@ function setup() {
     payment as never,
     outbox as never,
     { holdTtlSeconds: HOLD_TTL },
+    compensation as never,
   );
-  return { service, calls, lock, listing, payment, outbox, manager, sagaLogs, dataSource };
+  return {
+    service,
+    calls,
+    lock,
+    listing,
+    payment,
+    outbox,
+    manager,
+    sagaLogs,
+    dataSource,
+    compensation,
+  };
 }
 
 const codeOf = (p: Promise<unknown>) =>
@@ -210,30 +223,54 @@ describe('DepositSagaService.start: lỗi trước khi có đơn (Processing_Flo
   });
 });
 
-describe('DepositSagaService.start: tạo order lỗi (bù trừ là T3.3)', () => {
+describe('DepositSagaService.start: tạo order lỗi (T3.3, Component_Class_Design §4, §5)', () => {
   it.each([
-    ['4xx', new AppException('PAYMENT_ORDER_EXPIRED', 'x', 409), 'BUSINESS_ERROR'],
     [
-      '503 chưa gửi',
+      'test 5 (4xx: payment từ chối)',
+      new AppException('PAYMENT_ORDER_EXPIRED', 'x', 409),
+      'BUSINESS_ERROR',
+      'PAYMENT_ORDER_REJECTED',
+    ],
+    [
+      'test 5 (503 chưa gửi được)',
       new AppException('UPSTREAM_UNAVAILABLE', 'x', 503, { outcome: 'NOT_EXECUTED' }),
       'NOT_EXECUTED',
+      'PAYMENT_UNAVAILABLE',
     ],
-    ['504', new AppException('UPSTREAM_TIMEOUT', 'x', 504, { outcome: 'UNKNOWN' }), 'UNKNOWN'],
   ])(
-    '%s -> saga_log CREATE_PAYMENT_ORDER %s (detail mã lỗi), ném nguyên lỗi, nhả khóa',
-    async (_, err, outcome) => {
-      const { service, payment, sagaLogs, lock, manager } = setup();
+    '%s -> bù trừ (cancelAfterHold: %s, lý do %s) TRƯỚC khi nhả khóa; ném nguyên lỗi gốc; không ghi saga_log riêng',
+    async (_, err, outcome, reason) => {
+      const { service, payment, sagaLogs, compensation, calls } = setup();
       payment.createOrder.mockRejectedValueOnce(err);
       expect(await codeOf(service.start(TENANT, LISTING))).toBe(err.code);
-      expect(sagaLogs.insert).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(compensation.cancelAfterHold).toHaveBeenCalledWith(
+        expect.objectContaining({ listingId: LISTING, tenantId: TENANT, ownerId: OWNER }),
+        {
           step: 'CREATE_PAYMENT_ORDER',
           outcome,
           detail: { code: err.code, status: err.getStatus() },
-        }),
+          reason,
+        },
       );
-      expect(manager.update).not.toHaveBeenCalled();
-      expect(lock.release).toHaveBeenCalled();
+      expect(sagaLogs.insert).not.toHaveBeenCalled(); // saga_log nằm trong transaction bù trừ
+      expect(calls.indexOf('compensation')).toBeLessThan(calls.indexOf('lock.release'));
     },
   );
+
+  it('test 6 (504: không rõ payment đã tạo order chưa) -> saga_log CREATE_PAYMENT_ORDER UNKNOWN, KHÔNG bù trừ (job (a) đối soát), ném lỗi, nhả khóa', async () => {
+    const err = new AppException('UPSTREAM_TIMEOUT', 'x', 504, { outcome: 'UNKNOWN' });
+    const { service, payment, sagaLogs, lock, manager, compensation } = setup();
+    payment.createOrder.mockRejectedValueOnce(err);
+    expect(await codeOf(service.start(TENANT, LISTING))).toBe('UPSTREAM_TIMEOUT');
+    expect(sagaLogs.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: 'CREATE_PAYMENT_ORDER',
+        outcome: 'UNKNOWN',
+        detail: { code: 'UPSTREAM_TIMEOUT', status: 504 },
+      }),
+    );
+    expect(compensation.cancelAfterHold).not.toHaveBeenCalled();
+    expect(manager.update).not.toHaveBeenCalled();
+    expect(lock.release).toHaveBeenCalled();
+  });
 });

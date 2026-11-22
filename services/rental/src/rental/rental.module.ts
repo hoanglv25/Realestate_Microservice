@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EnvVars } from '../config/env.validation';
 import { RedisService } from '../redis/redis.service';
@@ -14,24 +15,32 @@ import { SagaLog } from './entities/saga-log.entity';
 import { Viewing } from './entities/viewing.entity';
 import { PAYMENT_EVENTS_CONFIG, PaymentEventsHandler } from './events/payment-events.handler';
 import type { PaymentEventsConfig } from './events/payment-events.handler';
+import { SAGA_RECONCILE_CONFIG, SagaReconcileJob } from './jobs/saga-reconcile.job';
+import type { SagaReconcileConfig } from './jobs/saga-reconcile.job';
 import { ListingLock } from './locks/listing.lock';
+import { CompensationService } from './services/compensation.service';
 import { DEPOSIT_SAGA_CONFIG, DepositSagaService } from './services/deposit-saga.service';
 import type { DepositSagaConfig } from './services/deposit-saga.service';
+import { ListingSyncService } from './services/listing-sync.service';
 import { ViewingService } from './services/viewing.service';
 
 /**
  * Nghiệp vụ rental. T3.2: lịch xem (`RE.VIEWING`), saga đặt cọc luồng thành công, nghe `payment.deposited`
- * (`RE.DEPOSIT_SAGA`). Bù trừ, job (T3.3, T3.4), vòng đời đơn (T3.5) thêm sau.
+ * (`RE.DEPOSIT_SAGA`). T3.3: bù trừ, đồng bộ trạng thái tin, `SagaReconcileJob` (`@nestjs/schedule`).
+ * Hết hạn giữ chỗ (T3.4b), vòng đời đơn (T3.5) thêm sau.
  * `InternalHttpService`, `RedisService`, `OutboxService`, `EventHandlerRegistry` đến từ module global của template.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Deposit, SagaLog, Viewing])],
+  imports: [TypeOrmModule.forFeature([Deposit, SagaLog, Viewing]), ScheduleModule.forRoot()],
   controllers: [DepositsController, ViewingsController],
   providers: [
     ListingClient,
     PaymentClient,
     ViewingService,
     DepositSagaService,
+    ListingSyncService,
+    CompensationService,
+    SagaReconcileJob,
     PaymentEventsHandler,
     {
       provide: RENTAL_CLIENT_CONFIG,
@@ -58,6 +67,14 @@ import { ViewingService } from './services/viewing.service';
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvVars, true>): DepositSagaConfig => ({
         holdTtlSeconds: config.get('HOLD_TTL_SECONDS', { infer: true }),
+      }),
+    },
+    {
+      provide: SAGA_RECONCILE_CONFIG,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<EnvVars, true>): SagaReconcileConfig => ({
+        intervalMs: config.get('SAGA_RECONCILE_INTERVAL_MS', { infer: true }),
+        stuckAfterSeconds: config.get('SAGA_STUCK_AFTER_SECONDS', { infer: true }),
       }),
     },
     {

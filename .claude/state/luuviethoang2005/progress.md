@@ -1,23 +1,22 @@
 ---
-task: T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn
+task: T3.3 Saga: bù trừ, đối soát, đồng bộ listing
 updated: 2026-11-22
-percent: 95
+percent: 100
 ---
 
 ## Đang làm
-- Bước hiện tại: code, test, tài liệu, review xong; chờ A chạy `test:infra` đủ bộ trên máy, dựng lại `payment`, chặng C (payOS thật), rồi commit + PR
+- Đủ DoD (test:infra 40/40 trên máy A, kiểm chứng compose); chờ commit + PR
 
 ## Đã xong (phiên này)
-- Chặng A: link payOS thật qua gateway (`orderCode` 100000, 2.000đ)
-- T3.2 merge (PR #27), tick `implementation/progress.md`; tách T3.4 → T3.4a/T3.4b
-- `PayosClient.verify`, `WebhookService`, `DepositCaptureService`, `WalletService.credit`, `PayosWebhookController`, script `webhook:fake`
-- payment unit 191, e2e 97, infra `payos-webhook` 12 + `payment-orders` 23; lint, format, build, contracts sạch; chạy thật `node dist/main.js` + script
-- A chạy `test:infra` 49/49 trên máy (có `messaging`, `storage`)
-- `RE.PAYMENT` v1.3, walkthrough, Docker guide §6, `CLAUDE.md §2.5`; compose + `.env.example` (RabbitMQ cho payment)
+- C20 chốt; kế hoạch T3.3 A duyệt (B1–B7)
+- `ListingSyncService`, `CompensationService`, `SagaReconcileJob`, `saga-log.ts`; saga nối bù trừ
+- `@nestjs/schedule@6.1.3`; `SAGA_RECONCILE_INTERVAL_MS`, `SAGA_STUCK_AFTER_SECONDS`
+- rental unit 177, e2e 97, infra 34 (rental 18, saga-compensation 8, messaging 8); lint, format, build, contracts sạch; chạy thật job
+- `RE.DEPOSIT_SAGA` v1.3, walkthrough rental, `CLAUDE.md §2.5`
 
 ## Còn lại
-- Commit (không dòng ghi công AI), push, PR; sau merge tick `implementation/progress.md` T3.4a
+- Commit, push, PR; sau merge tick `implementation/progress.md` T3.3
 
 ## Blockers
 _không có_
-- **Kết quả payOS thật (2026-11-22 23:29, A):** đường hầm cloudflared → gateway; payOS chấp nhận URL webhook (lần gọi thử `orderCode` 123, chữ ký đúng → `IGNORED`, `200`); `orderCode` 100001 trả 2.000đ thật qua MB → webhook `FT26327657219818` chữ ký đúng, `result = PAID`; `payment_orders` `PAID`, `paid_at` 16:29:01Z (đúng `transactionDateTime` giờ VN); ví 2.000; `payment.deposited` qua RabbitMQ → đơn rental `178b6f9c…` `PAID`, `paid_at` khớp.
+- **Kiểm chứng compose (2026-11-23 00:10, A):** (1) đơn `PAID` lúc 23:29 → job (b) đẩy → tin `58fe028e…` `DEPOSITED` (hết lỗi tin còn `HELD`). (2) `docker stop re-payment` → đặt cọc → `504 UNKNOWN` sau 9,35 giây (không phải `503` như PHASE-3 dự đoán: DNS Docker trả `ENOTFOUND` sau 3.936 ms > timeout 3.000 ms, ghi C24) → đơn `PENDING_PAYMENT`; bật lại payment → job (a): `404` → đơn `CANCELLED`, `PAYMENT_ORDER_NOT_FOUND`, đã đẩy; tin `c3e2ea29…` `AVAILABLE` (E8). Nhánh `NOT_EXECUTED` → `503` ngay được kiểm ở infra-spec bằng cổng đóng (`ECONNREFUSED`).
