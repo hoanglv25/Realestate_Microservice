@@ -31,6 +31,10 @@ export interface ReconcileResult {
   rejected: number;
   retry: number;
   failed: number;
+  /** (c) Yêu cầu hoàn đã tới payment. */
+  refundSent: number;
+  /** (c) Gửi yêu cầu hoàn lỗi, lượt sau gửi lại. */
+  refundRetry: number;
 }
 
 /**
@@ -39,8 +43,10 @@ export interface ReconcileResult {
  * - (a) Đơn `PENDING_PAYMENT` chưa có `payment_order_id`, tạo quá `SAGA_STUCK_AFTER_SECONDS` (tạo order `UNKNOWN`,
  *   hoặc rental chết giữa saga): hỏi payment `GET /internal/payment-orders/:depositId`. Có → gắn order (test 7);
  *   `404` → bù trừ, tin về `AVAILABLE` (test 8, E8); lỗi khác → lượt sau.
- * - (b) Đơn có `listing_target_status` chưa đồng bộ (bù trừ, `PAID` → `DEPOSITED`, hết hạn): `ListingSyncService.push`
- *   (test 17, C20).
+ * - (b) Đơn có `listing_target_status` chưa đồng bộ (bù trừ, `PAID` → `DEPOSITED`, hết hạn, `RENTED`, `AVAILABLE`
+ *   sau hoàn): `ListingSyncService.push` (test 17, C20).
+ * - (c) Đơn `REFUND_REQUESTED` chưa tới payment (`refund_synced_at IS NULL`): `PaymentClient.createRefund`; được →
+ *   đánh dấu; mọi lỗi → lượt sau (`RE.DEPOSIT_LIFECYCLE` test 4, chốt T3.5 B4, `ix_deposits_refund_sync`).
  *
  * Một đơn lỗi không chặn đơn khác. Lịch chạy, bỏ lượt chồng, nuốt lỗi lượt: `IntervalJob` (T3.4b). Các thay đổi
  * đều là `UPDATE ... WHERE` theo trạng thái nên chạy lại an toàn.
@@ -67,6 +73,8 @@ export class SagaReconcileJob extends IntervalJob {
       rejected: 0,
       retry: 0,
       failed: 0,
+      refundSent: 0,
+      refundRetry: 0,
     };
 
     // (a) đơn kẹt chưa có order
@@ -138,6 +146,28 @@ export class SagaReconcileJob extends IntervalJob {
       } catch (err) {
         r.failed++;
         this.logger.warn(`Đẩy trạng thái tin cho đơn ${d.id} lỗi: ${(err as Error).message}`);
+      }
+    }
+
+    // (c) yêu cầu hoàn chưa tới payment
+    const refunds = await this.deposits.find({
+      where: { status: 'REFUND_REQUESTED', refundSyncedAt: IsNull() },
+      order: { updatedAt: 'ASC' },
+      take: BATCH,
+    });
+    for (const d of refunds) {
+      try {
+        await this.payment.createRefund({ depositId: d.id });
+        await this.deposits.update(
+          { id: d.id, refundSyncedAt: IsNull() },
+          { refundSyncedAt: new Date() },
+        );
+        r.refundSent++;
+      } catch (err) {
+        r.refundRetry++;
+        this.logger.warn(
+          `Gửi lại yêu cầu hoàn của đơn ${d.id} chưa được, lượt sau thử lại: ${JSON.stringify(errorDetail(err))}`,
+        );
       }
     }
     return r;

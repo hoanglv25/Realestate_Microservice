@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/rental/src/rental/` (cấu trúc chung ở `RE.DEPOSIT_SAGA/Component_Class_Design.md §1`) |
 | **Quy ước** | `standards/coding-convention.md §4` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.2 |
 
 ## 1. Thành phần
 
@@ -74,7 +74,12 @@ SET status='RELEASED', released_at=now(), release_trigger='AUTO',
 WHERE id = $id AND status='PAID' AND auto_release_at <= now()
 ```
 
-Kèm outbox `rental.deposit-released` trong cùng transaction. `REFUND_REQUESTED` tự bị loại (BR-13). Quản trị viên từ chối yêu cầu hoàn sau mốc 72 giờ → đơn về `PAID` với `auto_release_at` đã qua → giải ngân ở lượt kế tiếp (Báo cáo §3.3).
+Kèm outbox `rental.deposit-released` trong cùng transaction; sau commit đẩy `RENTED` (`ListingSyncService.push`). Chọn tối đa 50 đơn `PAID` có `auto_release_at <= now()` mỗi lượt (`ix_deposits_auto_release`), kế thừa `IntervalJob`. `REFUND_REQUESTED` tự bị loại (BR-13). Quản trị viên từ chối yêu cầu hoàn sau mốc 72 giờ → đơn về `PAID` với `auto_release_at` đã qua → giải ngân ở lượt kế tiếp (Báo cáo §3.3).
+
+## 4a. `DeadlineJob`, `SagaReconcileJob` (c) (T3.5)
+
+- `DeadlineJob`: chọn `PAID`, `release_reminded_at IS NULL`, `auto_release_at - RELEASE_REMINDER_SECONDS <= now() < auto_release_at` (≤ 50); transaction `UPDATE release_reminded_at = now() WHERE id AND status='PAID' AND release_reminded_at IS NULL` + outbox `rental.release-reminder` → đúng một sự kiện mỗi đơn.
+- `SagaReconcileJob` (c): chọn `REFUND_REQUESTED AND refund_synced_at IS NULL` (≤ 50, `ix_deposits_refund_sync`) → `PaymentClient.createRefund`; thành công → `refund_synced_at = now() WHERE refund_synced_at IS NULL`; mọi lỗi → log `warn`, lượt sau.
 
 ## 5. Test bắt buộc
 

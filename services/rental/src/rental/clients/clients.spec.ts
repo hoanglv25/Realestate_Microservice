@@ -83,6 +83,15 @@ describe('PaymentClient', () => {
       timeoutMs: 3000,
     });
   });
+  it('createRefund: POST /internal/refund-requests {depositId}, idempotent: true (payment trả lại yêu cầu đã có, T3.5)', async () => {
+    const { http, payment } = setup();
+    await payment.createRefund({ depositId: 'D1' });
+    expect(http.post).toHaveBeenCalledWith(
+      'http://payment:3004/internal/refund-requests',
+      { depositId: 'D1' },
+      { timeoutMs: 3000, idempotent: true },
+    );
+  });
 });
 
 describe('classifyCall (Component_Class_Design §3, C14)', () => {

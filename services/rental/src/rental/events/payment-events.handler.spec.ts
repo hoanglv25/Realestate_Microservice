@@ -1,3 +1,4 @@
+import { IsNull } from 'typeorm';
 import { PaymentEventsHandler } from './payment-events.handler';
 
 const DEPOSIT = '3f9a1c2e-8b4d-4e6f-a1b2-c3d4e5f60718';
@@ -69,8 +70,129 @@ describe('PaymentEventsHandler: payment.deposited (RE.DEPOSIT_SAGA §6)', () => 
     expect(viewings.cancelOthersOnDeposit).not.toHaveBeenCalled();
   });
 
-  it('chỉ đăng ký payment.deposited (sự kiện khác của payment thuộc RE.DEPOSIT_LIFECYCLE)', () => {
+  it('đăng ký đúng 4 khóa đã bind vào rental.payment-events (không withdrawal-requested/failed, C10)', () => {
     const { registry } = setup();
-    expect(registry.on.mock.calls.map(([t]) => t)).toEqual(['payment.deposited']);
+    expect(registry.on.mock.calls.map(([t]) => t)).toEqual([
+      'payment.deposited',
+      'payment.refunded',
+      'payment.refund-rejected',
+      'payment.withdrawal-completed',
+    ]);
+  });
+});
+
+describe('PaymentEventsHandler: vòng đời đơn (RE.DEPOSIT_LIFECYCLE §4, T3.5)', () => {
+  const OCCURRED = '2026-11-25T09:00:00.000Z';
+  const ev = (eventType: string, payload: Record<string, unknown>) => ({
+    ...event,
+    eventId: `e-${eventType}`,
+    eventType,
+    occurredAt: OCCURRED,
+    payload: { depositId: DEPOSIT, tenantId: TENANT, ownerId: 'o', ...payload },
+  });
+  function setupLifecycle(affected: number[] = [1]) {
+    const registry = { on: jest.fn() };
+    const m = { update: jest.fn() };
+    for (const a of affected) m.update.mockResolvedValueOnce({ affected: a });
+    const handler = new PaymentEventsHandler(registry as never, {} as never, {
+      refundWindowSeconds: 172800,
+      autoReleaseSeconds: 259200,
+    });
+    const logger = { warn: jest.fn(), log: jest.fn() };
+    (handler as unknown as { logger: typeof logger }).logger = logger;
+    handler.onModuleInit();
+    const run = (type: string, e: unknown) =>
+      (
+        registry.on.mock.calls.find(([t]) => t === type)![1] as (
+          e: unknown,
+          m: unknown,
+        ) => Promise<void>
+      )(e, m);
+    return { run, m, logger };
+  }
+
+  it('test 6: payment.refunded TENANT -> REFUND_REQUESTED → REFUNDED, refunded_at, đích listing AVAILABLE (job (b) đẩy)', async () => {
+    const { run, m } = setupLifecycle();
+    await run(
+      'payment.refunded',
+      ev('payment.refunded', { requesterType: 'TENANT', amountVnd: 2100000 }),
+    );
+    expect(m.update).toHaveBeenCalledTimes(1);
+    const [entity, where, set] = m.update.mock.calls[0];
+    expect(entity.name).toBe('Deposit');
+    expect(where).toEqual({ id: DEPOSIT, status: 'REFUND_REQUESTED' });
+    expect(set).toEqual({
+      status: 'REFUNDED',
+      refundedAt: new Date(OCCURRED),
+      listingTargetStatus: 'AVAILABLE',
+      listingSyncedAt: null,
+    });
+  });
+
+  it('test 7: payment.refunded SYSTEM (tiền đến muộn, đơn EXPIRED) -> không đổi, log info', async () => {
+    const { run, m, logger } = setupLifecycle();
+    await run('payment.refunded', ev('payment.refunded', { requesterType: 'SYSTEM' }));
+    expect(m.update).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('payment.refunded TENANT nhưng đơn không REFUND_REQUESTED (sai thứ tự, trùng) -> 0 dòng, log warn', async () => {
+    const { run, logger } = setupLifecycle([0]);
+    await run('payment.refunded', ev('payment.refunded', { requesterType: 'TENANT' }));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(DEPOSIT));
+  });
+
+  it('test 8: payment.refund-rejected -> REFUND_REQUESTED → PAID (mốc 72 giờ giữ nguyên: quá rồi thì AutoReleaseJob giải ngân lượt sau)', async () => {
+    const { run, m } = setupLifecycle();
+    await run(
+      'payment.refund-rejected',
+      ev('payment.refund-rejected', { reason: 'Đã nhận phòng' }),
+    );
+    expect(m.update.mock.calls[0].slice(1)).toEqual([
+      { id: DEPOSIT, status: 'REFUND_REQUESTED' },
+      { status: 'PAID' },
+    ]);
+  });
+
+  it('payment.refund-rejected khi đơn không REFUND_REQUESTED -> log warn', async () => {
+    const { run, logger } = setupLifecycle([0]);
+    await run('payment.refund-rejected', ev('payment.refund-rejected', { reason: 'x' }));
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it('test 14: payment.withdrawal-completed đơn RELEASED -> WITHDRAWN, withdrawn_at', async () => {
+    const { run, m } = setupLifecycle([1]);
+    await run(
+      'payment.withdrawal-completed',
+      ev('payment.withdrawal-completed', { withdrawalId: 'w1', amountVnd: 1 }),
+    );
+    expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.update.mock.calls[0].slice(1)).toEqual([
+      { id: DEPOSIT, status: 'RELEASED' },
+      { status: 'WITHDRAWN', withdrawnAt: new Date(OCCURRED) },
+    ]);
+  });
+
+  it('test 14: payment.withdrawal-completed đơn REFUNDED -> giữ REFUNDED, chỉ đặt withdrawn_at nếu còn trống (BR-15 sửa)', async () => {
+    const { run, m, logger } = setupLifecycle([0, 1]);
+    await run(
+      'payment.withdrawal-completed',
+      ev('payment.withdrawal-completed', { withdrawalId: 'w1', amountVnd: 1 }),
+    );
+    const [, where, set] = m.update.mock.calls[1];
+    expect(where).toEqual({ id: DEPOSIT, status: 'REFUNDED', withdrawnAt: IsNull() });
+    expect(set).toEqual({ withdrawnAt: new Date(OCCURRED) });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('payment.withdrawal-completed đơn trạng thái khác (hoặc đã ghi) -> log warn, không đổi', async () => {
+    const { run, m, logger } = setupLifecycle([0, 0]);
+    await run(
+      'payment.withdrawal-completed',
+      ev('payment.withdrawal-completed', { withdrawalId: 'w1', amountVnd: 1 }),
+    );
+    expect(m.update).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalled();
   });
 });

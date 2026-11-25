@@ -32,12 +32,16 @@ const ORDER = {
 const notFound = () =>
   new AppException('PAYMENT_ORDER_NOT_FOUND', 'Không có', HttpStatus.NOT_FOUND);
 
-function setup(opts: { stuck?: unknown[]; unsynced?: unknown[]; intervalMs?: number } = {}) {
+function setup(
+  opts: { stuck?: unknown[]; unsynced?: unknown[]; refunds?: unknown[]; intervalMs?: number } = {},
+) {
   const deposits = {
     find: jest
       .fn()
       .mockResolvedValueOnce(opts.stuck ?? [])
-      .mockResolvedValueOnce(opts.unsynced ?? []),
+      .mockResolvedValueOnce(opts.unsynced ?? [])
+      .mockResolvedValueOnce(opts.refunds ?? []),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const m = {
     update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -46,7 +50,10 @@ function setup(opts: { stuck?: unknown[]; unsynced?: unknown[]; intervalMs?: num
   const dataSource = {
     transaction: jest.fn(async (cb: (mm: typeof m) => Promise<unknown>) => cb(m)),
   };
-  const payment = { getOrder: jest.fn().mockResolvedValue(ORDER) };
+  const payment = {
+    getOrder: jest.fn().mockResolvedValue(ORDER),
+    createRefund: jest.fn().mockResolvedValue({ refundRequestId: 'r1' }),
+  };
   const compensation = { cancelAfterHold: jest.fn().mockResolvedValue(true) };
   const sync = { push: jest.fn().mockResolvedValue('SYNCED') };
   const scheduler = {
@@ -172,9 +179,52 @@ describe('SagaReconcileJob (RE.DEPOSIT_SAGA/Component_Class_Design.md §7)', () 
     const first = job.tick();
     await job.tick(); // bỏ qua
     expect(deposits.find).toHaveBeenCalledTimes(1);
+    // runOnce có 3 lượt find: (a), (b), (c) (T3.5)
+    release();
+    await Promise.resolve();
     release();
     await Promise.resolve();
     release();
     await first;
+  });
+
+  describe('(c) gửi lại yêu cầu hoàn chưa tới payment (RE.DEPOSIT_LIFECYCLE test 4, chốt T3.5 B4)', () => {
+    const refund = (n: number) => ({
+      id: `4000000${n}-0000-4000-8000-000000000000`,
+      status: 'REFUND_REQUESTED',
+      refundSyncedAt: null,
+    });
+
+    it('chọn REFUND_REQUESTED chưa đánh dấu refund_synced_at, cũ nhất trước, tối đa 50', async () => {
+      const { job, deposits } = setup();
+      await job.runOnce();
+      expect(deposits.find).toHaveBeenNthCalledWith(3, {
+        where: { status: 'REFUND_REQUESTED', refundSyncedAt: IsNull() },
+        order: { updatedAt: 'ASC' },
+        take: 50,
+      });
+    });
+
+    it('payment nhận -> đánh dấu refund_synced_at (chỉ khi còn trống)', async () => {
+      const { job, deposits, payment } = setup({ refunds: [refund(1)] });
+      await expect(job.runOnce()).resolves.toMatchObject({ refundSent: 1, refundRetry: 0 });
+      expect(payment.createRefund).toHaveBeenCalledWith({ depositId: refund(1).id });
+      expect(deposits.update).toHaveBeenCalledWith(
+        { id: refund(1).id, refundSyncedAt: IsNull() },
+        { refundSyncedAt: NOW },
+      );
+    });
+
+    it('payment lỗi (mọi loại, kể cả 4xx) -> không đánh dấu, log warn, lượt sau gửi lại; đơn khác vẫn chạy', async () => {
+      const { job, deposits, payment, logger } = setup({ refunds: [refund(1), refund(2)] });
+      payment.createRefund.mockRejectedValueOnce(notFound());
+      await expect(job.runOnce()).resolves.toMatchObject({ refundSent: 1, refundRetry: 1 });
+      expect(deposits.update).toHaveBeenCalledTimes(1);
+      expect(deposits.update).toHaveBeenCalledWith(
+        { id: refund(2).id, refundSyncedAt: IsNull() },
+        expect.anything(),
+      );
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(refund(1).id));
+    });
   });
 });

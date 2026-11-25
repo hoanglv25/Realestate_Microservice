@@ -33,6 +33,15 @@ export interface PaymentOrderView {
   paidAt: string | null;
 }
 
+/** `data` của `RefundRequestResponse` (`payment-internal.v1.yaml`, `createRefundRequest`). */
+export interface RefundRequestView {
+  refundRequestId: string;
+  depositId: string;
+  amountVnd: number;
+  requesterType: 'TENANT' | 'SYSTEM';
+  status: string;
+}
+
 /**
  * Gọi API nội bộ của payment (timeout `PAYMENT_CALL_TIMEOUT_MS`). Mọi lệnh idempotent theo `depositId` nên đều
  * được retry (`idempotent: true` cho POST, `RE.DEPOSIT_SAGA/API_Spec.md §2`).
@@ -61,6 +70,18 @@ export class PaymentClient {
       timeoutMs: this.config.timeouts.paymentMs,
       idempotent: true,
     });
+  }
+
+  /**
+   * Yêu cầu hoàn 70% cho đơn người thuê tự hủy (BR-12, `RE.DEPOSIT_LIFECYCLE §3`). Payment trả lại yêu cầu đã có
+   * (`200`) nên gọi lại an toàn: `SagaReconcileJob` (c) gửi lại khi lần đầu lỗi.
+   */
+  createRefund(input: { depositId: string }): Promise<RefundRequestView> {
+    return this.http.post<RefundRequestView>(
+      `${this.config.urls.payment}/internal/refund-requests`,
+      { depositId: input.depositId },
+      { timeoutMs: this.config.timeouts.paymentMs, idempotent: true },
+    );
   }
 
   getOrder(depositId: string): Promise<PaymentOrderView> {
