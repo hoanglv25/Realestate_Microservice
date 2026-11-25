@@ -83,6 +83,7 @@ Realestate_Microservice/
 │  │     ├─ services/ payment-order, webhook, deposit-capture, wallet, refund, withdrawal, receipt, audit, payout-query
 │  │     ├─ clients/ payos.client.ts, rental.client.ts, identity.client.ts
 │  │     ├─ domain/refund-amount.ts
+│  │     ├─ http/receipt-too-large.interceptor.ts
 │  │     └─ entities/ dto/ errors/ config/
 │  │
 │  └─ notification/                   + cổng 3005, notification_db (RE.NOTIFICATION, RE.CHAT)
@@ -115,6 +116,7 @@ Mỗi service có thêm: `Dockerfile`, `Dockerfile.dockerignore`, `package.json`
 | `clients/` | Nơi duy nhất gọi service khác hoặc payOS. Listing và notification không có thư mục này |
 | `jobs/` | Công việc nền; chỉ rental có |
 | `domain/` | Hàm thuần, test không cần hạ tầng |
+| `http/` | Interceptor, pipe riêng của module (payment: đổi lỗi cỡ tệp multer sang mã của thiết kế) |
 | `errors/<miền>.errors.ts` | Mã lỗi `<MIỀN>_*`, khớp catalog trong `API_Spec.md` |
 | `src/messaging/`, `src/storage/` | Từ template; bật bằng biến môi trường |
 

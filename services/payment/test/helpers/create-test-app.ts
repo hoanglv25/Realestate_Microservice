@@ -22,7 +22,11 @@ export interface TestApp {
 export async function createTestApp(
   controllers: Type[] = [],
   providers: Provider[] = [],
-  options: { swagger?: boolean } = {},
+  options: {
+    swagger?: boolean;
+    /** Thay provider có sẵn bằng giá trị giả (ví dụ lưu chứng từ không cần S3 thật, T3.6). */
+    overrides?: Array<{ provide: unknown; useValue: unknown }>;
+  } = {},
 ): Promise<TestApp> {
   const logs: string[] = [];
   const stream = {
@@ -33,14 +37,17 @@ export async function createTestApp(
     },
   };
 
-  const moduleRef = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     imports: [AppModule],
     controllers,
     providers,
   })
     .overrideProvider(LOG_STREAM)
-    .useValue(stream)
-    .compile();
+    .useValue(stream);
+  for (const o of options.overrides ?? []) {
+    builder = builder.overrideProvider(o.provide).useValue(o.useValue);
+  }
+  const moduleRef = await builder.compile();
 
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app);

@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Rút tiền, hoàn tiền, chứng từ, bất biến ví |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, Báo cáo v2 §3.2.3–3.2.4, Hình 3.5 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-18 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.3 |
 
 ## 1. Rút tiền
 
@@ -56,7 +56,7 @@ sequenceDiagram
     end
 ```
 
-Tiền đến muộn tạo yêu cầu hoàn `SYSTEM` 100% ở `RE.PAYMENT §1.2`; quản trị viên xử lý cùng màn hình.
+Tiền đến muộn tạo yêu cầu hoàn `SYSTEM` 100% ở `RE.PAYMENT §1.2`; quản trị viên xử lý cùng màn hình. Người thuê thường chưa khai tài khoản: họ nhắn quản trị viên qua chat `SUPPORT`, quản trị viên hướng dẫn khai ở trang hồ sơ rồi mở route 14 để lấy số (`API_Spec §1.5`). Hoàn tất cũng phát `payment.refunded` (`SYSTEM`).
 
 ## 3. Bảng xử lý lỗi
 

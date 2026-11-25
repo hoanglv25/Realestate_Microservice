@@ -51,7 +51,7 @@
 - [x] T3.3 Saga: bù trừ, đối soát, đồng bộ listing — A (2026-11-23, PR #29, `207abc1`; giao lại từ C theo chốt 2026-11-18)
 - [x] T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn — A (2026-11-22, PR #28, `6d03f6c`; gồm kiểm chứng payOS thật chuyển từ T3.2)
 - [x] T3.4b Hết hạn giữ chỗ — A (2026-11-25, PR #30, `ef2abb5`; tách 2026-11-22)
-- [ ] T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân — B (chuyển từ C 2026-11-16)
+- [x] T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân — A (2026-11-25, PR #31, `549977a`; giao lại từ B theo chốt 2026-11-18)
 - [ ] T3.6 Payout: hoàn, rút, chứng từ, ví — C
 
 ## Phase 4 — Bất đồng bộ, notification, chat
@@ -104,3 +104,4 @@
 | 2026-11-25 | A | T3.4b kiểm chứng compose: `HOLD_TTL_SECONDS=60`, đặt cọc tin 20 không trả → `HoldExpiryJob` hủy order payOS (`100002` `CANCELLED`) rồi đơn `EXPIRED` sau ~65 giây (4,9 giây sau hạn), tin `AVAILABLE` (E4); webhook giả vào link đã hủy → `late_payments` + yêu cầu hoàn (E5). rental unit 196, e2e 97, `test:infra` 46/46 (máy A). `RE.DEPOSIT_SAGA` v1.4; khung job `IntervalJob` | PR T3.4b; sau merge tick T3.4b; tiếp T3.5 |
 | 2026-11-25 | A | T3.4b merge vào `develop` (PR #30, `ef2abb5`), CI `check`, `test` (template-nest, identity, api-gateway, listing, payment, rental), `ci` xanh. Có: `HoldExpiryJob` (BR-09: hủy link trước, nhả chỗ sau), khung `IntervalJob` (`SagaReconcileJob` kế thừa), `HOLD_EXPIRY_INTERVAL_MS`. 6 commit của PR còn dòng ghi công AI (trái `git-workflow.md` dòng 39); merge rồi nên giữ nguyên, không viết lại `develop` | Tick T3.4b; tiếp T3.5 |
 | 2026-11-25 | A | T3.5 kiểm chứng compose: `AUTO_RELEASE_SECONDS=120`, `RELEASE_REMINDER_SECONDS=60`; đặt cọc tin 22 + webhook giả (`orderCode` 100003) → `PAID` 08:35:50Z → `rental.release-reminder` 08:36:55Z → `RELEASED` trigger `AUTO` 08:37:55Z (5 giây sau mốc), tin `RENTED` (E6). rental unit 648, e2e 97, `test:infra` 67/67 (máy A); E7 kiểm bằng chạy đồng thời + 2 khe đua cố định. Nhánh hoàn/rút chạy đầu-cuối chờ T3.6 (payment chưa có `refund-requests`, chưa phát `refunded`…). `RE.DEPOSIT_LIFECYCLE` v1.2 | PR T3.5; sau merge tick T3.5; tiếp T3.6 |
+| 2026-11-25 | A | T3.5 merge vào `develop` (PR #31, `549977a`). Có: máy trạng thái đơn, route 1–7, `withdrawal-eligibility`, `AutoReleaseJob`, `DeadlineJob`, `SagaReconcileJob` (c), handler `refunded`/`refund-rejected`/`withdrawal-completed`, `audit_log`. Migration `1736000000000` cần chạy với `DATABASE_URL` của rental (`services/rental/.env` chưa có) | Tick T3.5; tiếp T3.6 |

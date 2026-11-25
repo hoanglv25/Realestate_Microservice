@@ -76,7 +76,12 @@ describe('API nội bộ payment order với hạ tầng thật (payOS giả)', 
   async function countQueries(call: () => Promise<unknown>): Promise<number> {
     queries.length = 0;
     await call();
-    return queries.filter((q) => !/^(START TRANSACTION|COMMIT|ROLLBACK)/i.test(q.trim())).length;
+    return queries.filter(
+      (q) =>
+        !/^(START TRANSACTION|COMMIT|ROLLBACK)/i.test(q.trim()) &&
+        // truy vấn nền của OutboxRelay (khi có RabbitMQ) không thuộc request
+        !/published_at IS NULL|UPDATE outbox_events/i.test(q),
+    ).length;
   }
 
   async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {

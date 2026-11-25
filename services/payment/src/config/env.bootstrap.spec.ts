@@ -57,7 +57,7 @@ describe('env.bootstrap (khởi động tiến trình)', () => {
     expect(r.stderr).toBe('');
   });
 
-  it('payment thiếu DB, RabbitMQ, khóa payOS, JWT -> thoát mã 1 và liệt kê từng thứ thiếu', () => {
+  it('payment thiếu DB, RabbitMQ, khóa payOS, JWT, Redis, S3, URL nội bộ -> thoát mã 1 và liệt kê từng thứ thiếu', () => {
     const r = run({ SERVICE_NAME: 'payment' });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('Thiếu cấu hình của payment-service');
@@ -69,6 +69,10 @@ describe('env.bootstrap (khởi động tiến trình)', () => {
       'PAYOS_CHECKSUM_KEY',
       'JWT_ISSUER',
       'JWT_PUBLIC_KEY',
+      'REDIS_URL',
+      'S3_ENDPOINT',
+      'INTERNAL_RENTAL_URL',
+      'INTERNAL_IDENTITY_URL',
     ]) {
       expect(r.stderr).toContain(name);
     }
@@ -84,6 +88,14 @@ describe('env.bootstrap (khởi động tiến trình)', () => {
       PAYOS_CHECKSUM_KEY: 'checksum-bi-mat',
       JWT_ISSUER: 'realestate-identity',
       JWT_PUBLIC_KEY_PATH: '../../secrets/jwt-public.pem',
+      // T3.6: Idempotency-Key, chứng từ S3, gọi rental và identity
+      REDIS_URL: 'redis://:x@localhost:6379',
+      S3_ENDPOINT: 'http://localhost:9000',
+      S3_ACCESS_KEY: 'minio_admin',
+      S3_SECRET_KEY: 'change_me_minio',
+      S3_BUCKETS: 'bank-qr,payment-proofs',
+      INTERNAL_RENTAL_URL: 'http://localhost:3003',
+      INTERNAL_IDENTITY_URL: 'http://localhost:3001',
     });
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
