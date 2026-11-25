@@ -60,6 +60,12 @@ export interface EnvVars {
   // HoldExpiryJob (RE.DEPOSIT_SAGA §5, §7; T3.4b)
   /** Chu kỳ job hết hạn giữ chỗ (ms, E4 cần ≤ 10 giây); `0` tắt job (test gọi `runOnce` trực tiếp). */
   HOLD_EXPIRY_INTERVAL_MS: number;
+  // Vòng đời đơn (RE.DEPOSIT_LIFECYCLE §6; T3.5)
+  /** Nhắc giải ngân trước `auto_release_at` bao nhiêu giây (24 giờ). */
+  RELEASE_REMINDER_SECONDS: number;
+  /** Chu kỳ `AutoReleaseJob`, `DeadlineJob` (ms); `0` tắt job (test gọi `runOnce` trực tiếp). */
+  AUTO_RELEASE_INTERVAL_MS: number;
+  DEADLINE_INTERVAL_MS: number;
 }
 
 const optionalString = Joi.string().trim().empty('');
@@ -143,6 +149,9 @@ export const envSchema = Joi.object<EnvVars>({
   SAGA_RECONCILE_INTERVAL_MS: Joi.number().integer().min(0).max(3600000).default(15000),
   SAGA_STUCK_AFTER_SECONDS: Joi.number().integer().min(1).max(86400).default(30),
   HOLD_EXPIRY_INTERVAL_MS: Joi.number().integer().min(0).max(3600000).default(5000),
+  RELEASE_REMINDER_SECONDS: Joi.number().integer().min(10).default(86400),
+  AUTO_RELEASE_INTERVAL_MS: Joi.number().integer().min(0).max(3600000).default(10000),
+  DEADLINE_INTERVAL_MS: Joi.number().integer().min(0).max(3600000).default(10000),
 })
   // Outbox và inbox nằm trong DB của service, nên bật RabbitMQ thì bắt buộc có DB.
   .with('RABBITMQ_URL', 'DATABASE_URL')

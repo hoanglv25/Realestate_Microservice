@@ -117,6 +117,9 @@ describe('validateEnv', () => {
       SAGA_RECONCILE_INTERVAL_MS: 15000,
       SAGA_STUCK_AFTER_SECONDS: 30,
       HOLD_EXPIRY_INTERVAL_MS: 5000,
+      RELEASE_REMINDER_SECONDS: 86400,
+      AUTO_RELEASE_INTERVAL_MS: 10000,
+      DEADLINE_INTERVAL_MS: 10000,
     });
     expect(validateEnv({ SERVICE_NAME: 'rental', HOLD_TTL_SECONDS: '60' }).HOLD_TTL_SECONDS).toBe(
       60,
@@ -155,6 +158,24 @@ describe('validateEnv', () => {
     );
     expect(() => validateEnv({ SERVICE_NAME: 'x', HOLD_EXPIRY_INTERVAL_MS: 'abc' })).toThrow(
       /HOLD_EXPIRY_INTERVAL_MS/,
+    );
+  });
+
+  it('rental T3.5: AUTO_RELEASE_INTERVAL_MS, DEADLINE_INTERVAL_MS = 0 tắt job; RELEASE_REMINDER_SECONDS ≥ 10', () => {
+    const v = validateEnv({
+      SERVICE_NAME: 'rental',
+      AUTO_RELEASE_INTERVAL_MS: '0',
+      DEADLINE_INTERVAL_MS: '0',
+      RELEASE_REMINDER_SECONDS: '30',
+    });
+    expect(v.AUTO_RELEASE_INTERVAL_MS).toBe(0);
+    expect(v.DEADLINE_INTERVAL_MS).toBe(0);
+    expect(v.RELEASE_REMINDER_SECONDS).toBe(30);
+    for (const name of ['AUTO_RELEASE_INTERVAL_MS', 'DEADLINE_INTERVAL_MS']) {
+      expect(() => validateEnv({ SERVICE_NAME: 'x', [name]: '-1' })).toThrow(new RegExp(name));
+    }
+    expect(() => validateEnv({ SERVICE_NAME: 'x', RELEASE_REMINDER_SECONDS: '5' })).toThrow(
+      /RELEASE_REMINDER_SECONDS/,
     );
   });
 });

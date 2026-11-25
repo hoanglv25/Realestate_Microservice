@@ -29,9 +29,11 @@ Object.assign(process.env, {
   SWAGGER_ENABLED: 'false',
   DATABASE_URL: databaseUrl,
   RABBITMQ_URL: rabbitUrl,
-  // SagaReconcileJob, HoldExpiryJob không tự chạy trong test hạ tầng: test gọi runOnce() đúng lúc cần (T3.3, T3.4b)
+  // Các job không tự chạy trong test hạ tầng: test gọi runOnce() đúng lúc cần (T3.3, T3.4b, T3.5)
   SAGA_RECONCILE_INTERVAL_MS: '0',
   HOLD_EXPIRY_INTERVAL_MS: '0',
+  AUTO_RELEASE_INTERVAL_MS: '0',
+  DEADLINE_INTERVAL_MS: '0',
 });
 // S3 do storage.infra-spec.ts tự bật (để test messaging không có thêm check 's3')
 for (const name of [
