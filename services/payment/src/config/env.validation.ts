@@ -47,6 +47,11 @@ export interface EnvVars {
   PAYOS_CANCEL_URL: string;
   /** Timeout mỗi lần gọi payOS; phải < PAYMENT_CALL_TIMEOUT_MS của rental (3000). */
   PAYOS_TIMEOUT_MS: number;
+  // payment-service T3.6 (RE.PAYOUT/API_Spec.md §6). Hai URL bắt buộc ở payment.env.ts
+  INTERNAL_RENTAL_URL?: string;
+  INTERNAL_IDENTITY_URL?: string;
+  /** Cỡ tối đa của tệp chứng từ (byte). */
+  RECEIPT_MAX_BYTES: number;
 }
 
 const optionalString = Joi.string().trim().empty('');
@@ -125,6 +130,17 @@ export const envSchema = Joi.object<EnvVars>({
     .uri({ scheme: ['http', 'https'] })
     .default('http://localhost:3000/payment/cancel'),
   PAYOS_TIMEOUT_MS: Joi.number().integer().min(100).max(30000).default(2500),
+
+  // --- payment-service: payout (RE.PAYOUT/API_Spec.md §6, T3.6) ---
+  INTERNAL_RENTAL_URL: Joi.string()
+    .trim()
+    .uri({ scheme: ['http', 'https'] })
+    .empty(''),
+  INTERNAL_IDENTITY_URL: Joi.string()
+    .trim()
+    .uri({ scheme: ['http', 'https'] })
+    .empty(''),
+  RECEIPT_MAX_BYTES: Joi.number().integer().min(1).max(20971520).default(5242880),
 })
   // Outbox và inbox nằm trong DB của service, nên bật RabbitMQ thì bắt buộc có DB.
   .with('RABBITMQ_URL', 'DATABASE_URL')

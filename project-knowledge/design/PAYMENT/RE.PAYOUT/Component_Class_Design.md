@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/payment/src/payment/` (cấu trúc chung ở `RE.PAYMENT/Component_Class_Design.md §1`) |
 | **Quy ước** | `standards/coding-convention.md §4`, `standards/security-policy.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-18 — v1.2 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.3 |
 
 ## 1. Thành phần
 
@@ -15,9 +15,11 @@
 | `services/withdrawal.service.ts` | Tạo, hoàn tất, thất bại |
 | `services/receipt.service.ts` | Đọc tệp, kiểm loại/cỡ, `sha256`, `putObject` S3 |
 | `services/audit.service.ts` | Ghi `audit_log` trong transaction của thao tác |
-| `services/payout-query.service.ts` | Route 1, 3, 4, 5, 11, 12 |
+| `services/payout-query.service.ts` | Route 1, 3, 4, 5, 11, 12; route 13, 14 (chi tiết + `IdentityClient`) |
 | `clients/rental.client.ts` | `withdrawalEligibility` |
-| `clients/identity.client.ts` | `getBankAccount` |
+| `clients/identity.client.ts` | `getBankAccount` (`404` → `null`) |
+| `controllers/withdrawals.controller.ts`, `transactions.controller.ts`, `payouts.admin.controller.ts`, `refund-requests.internal.controller.ts` | Route 1–14, nội bộ |
+| `entities/{refund-request,withdrawal-request,transfer-receipt,audit-log}.entity.ts` | Bảng đã có ở migration T3.1 |
 | `domain/refund-amount.ts` | Hàm thuần tính 70% |
 
 ## 2. Sơ đồ lớp
@@ -95,7 +97,10 @@ async complete(adminId: string, id: string, file: Express.Multer.File) {
 | 12 | Người A xem giao dịch của B | Không có trong danh sách (Báo cáo T15) |
 | 13 | Bất biến ví sau mọi test | `balance = Σ vào − Σ ra` (E10) |
 | 14 | Mọi thao tác quản trị | Có một dòng `audit_log` |
+| 15 | Route 13, 14: người nhận đã khai / chưa khai | `bankAccount` đầy đủ / `null` |
+| 16 | Chứng từ đổi đuôi (byte đầu không khớp loại), quá cỡ | `400 PAYMENT_RECEIPT_INVALID`, không gọi S3 |
+| 17 | Yêu cầu hoàn cũ `REJECTED`, rental gọi lại | Tạo yêu cầu mới `201` |
 
 ## 5. Đã chốt
 
-Xem `API_Spec.md §8` (2026-11-16).
+Xem `API_Spec.md §8` (2026-11-16), `§8a` (2026-11-25).

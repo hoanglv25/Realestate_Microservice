@@ -126,4 +126,31 @@ describe('validateEnv', () => {
       /PAYOS_TIMEOUT_MS/,
     );
   });
+
+  it('payment T3.6: INTERNAL_RENTAL_URL, INTERNAL_IDENTITY_URL là URL http(s); RECEIPT_MAX_BYTES mặc định 5 MB, trong khoảng', () => {
+    expect(validateEnv({ SERVICE_NAME: 'payment' })).toMatchObject({ RECEIPT_MAX_BYTES: 5242880 });
+    const env = validateEnv({
+      SERVICE_NAME: 'payment',
+      INTERNAL_RENTAL_URL: 'http://localhost:3003',
+      INTERNAL_IDENTITY_URL: ' http://localhost:3001 ',
+      RECEIPT_MAX_BYTES: '1048576',
+    });
+    expect(env).toMatchObject({
+      INTERNAL_RENTAL_URL: 'http://localhost:3003',
+      INTERNAL_IDENTITY_URL: 'http://localhost:3001',
+      RECEIPT_MAX_BYTES: 1048576,
+    });
+    expect(
+      validateEnv({ SERVICE_NAME: 'x', INTERNAL_RENTAL_URL: '' }).INTERNAL_RENTAL_URL,
+    ).toBeUndefined();
+    expect(() => validateEnv({ SERVICE_NAME: 'x', INTERNAL_IDENTITY_URL: 'ftp://sai' })).toThrow(
+      /INTERNAL_IDENTITY_URL/,
+    );
+    expect(() => validateEnv({ SERVICE_NAME: 'x', RECEIPT_MAX_BYTES: '0' })).toThrow(
+      /RECEIPT_MAX_BYTES/,
+    );
+    expect(() => validateEnv({ SERVICE_NAME: 'x', RECEIPT_MAX_BYTES: '20971521' })).toThrow(
+      /RECEIPT_MAX_BYTES/,
+    );
+  });
 });
