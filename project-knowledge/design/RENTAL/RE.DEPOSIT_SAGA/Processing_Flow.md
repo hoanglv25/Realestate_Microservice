@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Đặt cọc thành công, bù trừ, hết hạn giữ chỗ, đối soát, bảng xử lý từng điểm lỗi |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0004, Báo cáo v2 Hình 3.9–3.11, Bảng 4.9 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.4 |
 
 ## 1. Luồng thành công
 
@@ -112,4 +112,4 @@ Link bị hủy **trước** khi nhả chỗ, nên người thuê không trả �
 
 ## 6. Số truy vấn
 
-`POST /deposits` so với ngưỡng ghi 6 của `non-functional-standards.md`: insert đơn + `saga_log` + outbox (3) và cập nhật order + `saga_log` (2), cộng đọc lại khi idempotent. Tổng 5–6, trong ngưỡng. **Nhánh bù trừ** (tạo order `BUSINESS_ERROR`/`NOT_EXECUTED`): 3 + bù trừ (`UPDATE` đơn, `saga_log`, outbox) 3 + đánh dấu đã đẩy `AVAILABLE` 1 = **7**, A chấp nhận 2026-11-22. `SagaReconcileJob` mỗi lượt: 2 `SELECT` (≤ 50 đơn mỗi phần); mỗi đơn (a) gắn order 2, (b) đẩy thành công 1, C20 2. Lời gọi liên service: 3 (snapshot, hold, create order), hằng số.
+`POST /deposits` so với ngưỡng ghi 6 của `non-functional-standards.md`: insert đơn + `saga_log` + outbox (3) và cập nhật order + `saga_log` (2), cộng đọc lại khi idempotent. Tổng 5–6, trong ngưỡng. **Nhánh bù trừ** (tạo order `BUSINESS_ERROR`/`NOT_EXECUTED`): 3 + bù trừ (`UPDATE` đơn, `saga_log`, outbox) 3 + đánh dấu đã đẩy `AVAILABLE` 1 = **7**, A chấp nhận 2026-11-22. `SagaReconcileJob` mỗi lượt: 2 `SELECT` (≤ 50 đơn mỗi phần); mỗi đơn (a) gắn order 2, (b) đẩy thành công 1, C20 2. `HoldExpiryJob` mỗi lượt: 1 `SELECT` (≤ 50 đơn); mỗi đơn hết hạn: transaction `UPDATE` + `saga_log` + outbox (3) + đánh dấu đã đẩy `AVAILABLE` (1) = **4**, listing trả 4xx (C20) thì **5**; 2 lời gọi (`cancel`, `PUT status`). Lời gọi liên service của `POST /deposits`: 3 (snapshot, hold, create order), hằng số.

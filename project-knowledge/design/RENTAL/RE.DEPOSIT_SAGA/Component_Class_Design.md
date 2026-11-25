@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/rental/src/rental/` |
 | **Quy ước** | `standards/coding-convention.md §4`, `standards/reliability-standard.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.4 |
 
 ## 1. Cấu trúc
 
@@ -27,6 +27,7 @@ src/rental/
 │  └─ payment.client.ts                 # createOrder, cancelOrder, getOrder, createRefund
 ├─ events/payment-events.handler.ts     # nghe queue rental.payment-events
 ├─ jobs/
+│  ├─ interval-job.ts                   # khung chạy định kỳ dùng chung cho các job (T3.4b)
 │  ├─ hold-expiry.job.ts                # BR-09
 │  ├─ saga-reconcile.job.ts             # đơn kẹt + listing chưa đồng bộ
 │  ├─ deadline.job.ts                   # RE.DEPOSIT_LIFECYCLE: nhắc trước 24h
@@ -170,6 +171,14 @@ Handler không gọi HTTP. Phần hủy lịch xem thêm 1 đọc đơn + 1 `UPD
 | `SagaReconcileJob` (b) | `listing_target_status IS NOT NULL AND listing_synced_at IS NULL` | `ListingSyncService.push` | `PUT` idempotent |
 
 Thứ tự trong `HoldExpiryJob` là BR-09: **hủy link trước, nhả chỗ sau**. Mỗi đơn lỗi không chặn đơn khác. Một bản sao rental (Báo cáo §7.2); không làm `FOR UPDATE SKIP LOCKED` (chốt 2026-11-16, ghi hạn chế: chỉ chạy một bản sao rental).
+
+Chốt khi làm T3.4b (2026-11-25, A duyệt):
+
+- `HoldExpiryJob` chọn `status='PENDING_PAYMENT' AND expires_at < now()`, `ORDER BY expires_at ASC`, tối đa 50 (`ix_deposits_expiry`).
+- Chỉ `200`/`404` của `cancel` mới dẫn tới `EXPIRED`. Transaction: `UPDATE ... WHERE status='PENDING_PAYMENT'` (`EXPIRED`, `listing_target_status='AVAILABLE'`, `listing_synced_at=null`) + `saga_log CANCEL_PAYMENT_ORDER OK {status}` + outbox `rental.deposit-expired`. `UPDATE` 0 dòng (đơn vừa đổi trạng thái) → dừng: không outbox, không đẩy listing, log `info`.
+- `409 PAYMENT_ORDER_ALREADY_PAID` → bỏ qua, log `info`, không `saga_log` (job lặp tới khi `payment.deposited` tới).
+- `503`/`504`/lỗi kết nối **và mọi 4xx khác** → giữ `PENDING_PAYMENT`, log `warn`, lượt sau thử lại: chưa chắc link đã hủy thì không nhả chỗ (BR-09).
+- Khung chạy định kỳ tách thành lớp cơ sở `IntervalJob` (`jobs/interval-job.ts`): `addInterval` theo biến `*_INTERVAL_MS`, `0` tắt, bỏ lượt khi lượt trước chưa xong, lỗi một lượt chỉ log `warn`, xóa interval khi tắt. `SagaReconcileJob`, `HoldExpiryJob` (và job của `RE.DEPOSIT_LIFECYCLE`) kế thừa.
 
 Lịch chạy (T3.3): `@nestjs/schedule` **6.1.3** (`SchedulerRegistry.addInterval`; dòng 12.x là ESM thuần, không nạp được trong dự án CommonJS). Lượt trước chưa xong thì bỏ lượt mới; mỗi phần tối đa 50 đơn, cũ nhất trước. (a) gắn order: `UPDATE ... WHERE payment_order_id IS NULL` + `saga_log CREATE_PAYMENT_ORDER OK {via: reconcile}`.
 

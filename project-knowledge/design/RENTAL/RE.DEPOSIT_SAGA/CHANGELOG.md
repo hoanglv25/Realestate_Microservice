@@ -2,6 +2,25 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v1.4] — 2026-11-25
+
+- **type:** MINOR
+- **author:** hoang.lv (A duyệt kế hoạch T3.4b cùng Claude, B1–B7)
+- **summary:** Chốt chi tiết `HoldExpiryJob` khi làm T3.4b; tách khung job `IntervalJob`. Không đổi route, mã lỗi, hợp đồng.
+
+### Thay đổi
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `API_Spec.md` §5 `HOLD_EXPIRY_INTERVAL_MS` | Sửa (`0` tắt lịch) |
+| 2 | `Component_Class_Design.md` §1 | Thêm `jobs/interval-job.ts` |
+| 3 | `Component_Class_Design.md` §7 | Thêm "Chốt khi làm T3.4b" |
+| 4 | `Processing_Flow.md` §6 | Thêm số truy vấn `HoldExpiryJob` |
+
+- **Cũ:** §7 chỉ có một dòng bảng cho `HoldExpiryJob`; không nói `saga_log`, các lỗi ngoài `200`/`404`/`409`/`503`/`504`, khi `UPDATE` 0 dòng; `HOLD_EXPIRY_INTERVAL_MS` không tắt được.
+- **Mới:** `saga_log CANCEL_PAYMENT_ORDER OK {status}` trong transaction `EXPIRED`; `409 ALREADY_PAID` chỉ log `info`; mọi lỗi khác (kể cả 4xx lạ) giữ `PENDING_PAYMENT`, lượt sau thử lại; `UPDATE` 0 dòng → dừng; `0` tắt lịch; số truy vấn mỗi đơn 4 (C20: 5), ≤ ngưỡng ghi 6; khung chạy định kỳ chung `IntervalJob`.
+- **Lý do:** thiết kế chưa nêu; BR-09 (hủy link trước, nhả chỗ sau) đòi không nhả chỗ khi chưa chắc link đã hủy; T3.5 thêm hai job cùng khung. A duyệt 2026-11-25.
+
 ## [v1.3] — 2026-11-22
 
 - **type:** MINOR
