@@ -17,10 +17,10 @@ branch: feature/T3.4b-hold-expiry (từ `develop` tại `207abc1`, sau PR #29 T3
 ## Definition of Done
 
 - [x] Test 11–13, 16 ở `RE.DEPOSIT_SAGA/Component_Class_Design.md §8` pass — unit `hold-expiry.job.spec.ts` (13), infra `saga-compensation.infra-spec.ts` (6 mới; 16 với đơn `EXPIRED` do job) (2026-11-25)
-- [ ] rental `test` **196/196**, `test:e2e` **97/97** (môi trường Claude); `test:infra` rental 18 + saga-compensation 14 + messaging 8 = **40/40** trên Postgres 16/Redis/RabbitMQ 3.x cài trực tiếp (môi trường Claude không kéo được image Docker Hub, nên `storage` 6 test cần S3 chưa chạy) — **còn chạy `test:infra` đủ 46 trên máy A**
+- [x] rental `test` **196/196**, `test:e2e` **97/97** (môi trường Claude); `test:infra` **46/46 trên máy A** (2026-11-25 14:33: rental, saga-compensation, messaging, storage)
 - [x] `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm contracts:check` không lỗi (2026-11-25)
 - [x] Số truy vấn `HoldExpiryJob` đếm bằng log SQL: một lượt 1 đơn = **5** (1 `SELECT` + 4), trong ngưỡng ghi 6 mỗi đơn
-- [ ] Kiểm chứng (`PHASE-3.md`): `HOLD_TTL_SECONDS=60`, không thanh toán → đơn `EXPIRED` trong ≤ 70 giây, tin `AVAILABLE` (E4); webhook giả sau đó → `late_payments` (E5)
+- [x] Kiểm chứng (`PHASE-3.md`, máy A, compose, 2026-11-25): `HOLD_TTL_SECONDS=60`, đơn `934afcdc…` tin 20 không thanh toán → `EXPIRED` sau **~65 giây** (hạn 07:44:20.94Z, `EXPIRED` 07:44:25.82Z: 4,9 giây sau hạn), `saga_log CANCEL_PAYMENT_ORDER OK {"status": 200}`, order `100002` `CANCELLED`, tin `AVAILABLE`, `held_by_deposit_id` trống, đã đồng bộ (E4); webhook giả `orderCode` 100002, 6.000.000đ → `late_payments` có dòng, `refund_request_id` có giá trị (E5)
 - [x] `RE.DEPOSIT_SAGA` v1.4 + `CHANGELOG.md`; walkthrough rental; dòng `CLAUDE.md §2.5`; `.env.example` (gốc, rental), compose
 
 ## Các bước thực hiện (tổng quan)
@@ -31,7 +31,7 @@ branch: feature/T3.4b-hold-expiry (từ `develop` tại `207abc1`, sau PR #29 T3
 - [x] 4. Env `HOLD_EXPIRY_INTERVAL_MS` (TDD: spec đỏ → xanh 12/12)
 - [x] 5. TDD: `IntervalJob` (5 test, đỏ → xanh), `SagaReconcileJob` kế thừa (7 test cũ không sửa, xanh), `HoldExpiryJob` (13 test, đỏ → xanh), đăng ký module
 - [x] 6. Test hạ tầng (11, `404`, 12, 13, 16, đơn chưa hết hạn), đếm truy vấn 5
-- [ ] 7. Walkthrough ✔, `code-review` 5 chiều ✔, commit cục bộ ✔ — **còn:** kiểm chứng compose E4/E5 + `test:infra` đủ trên máy A, rồi push, PR
+- [x] 7. Walkthrough, `code-review` 5 chiều, commit; `test:infra` 46/46 và kiểm chứng E4/E5 trên máy A (2026-11-25) — còn push, PR
 
 ## Tái sử dụng
 
