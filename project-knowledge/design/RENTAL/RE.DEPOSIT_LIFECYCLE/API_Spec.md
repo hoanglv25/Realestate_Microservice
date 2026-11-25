@@ -6,7 +6,7 @@
 | **Service** | `rental` (cổng 3003) |
 | **Quy tắc** | BR-11, BR-12, BR-13, BR-15, BR-16, BR-18, BR-19 |
 | **CSDL** | `rental_db`: `deposits` (DDL ở `RE.DEPOSIT_SAGA/API_Spec.md §6`), `audit_log` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.2 |
 
 > Đường dẫn chốt 2026-11-12 (A6). Thao tác lấy theo Báo cáo v2 Bảng 3.9. Hồ sơ người thuê đã cắt (`implementation/van-de-can-quyet-dinh.md` D).
 
@@ -38,6 +38,16 @@
 | 7 | 4 | Đã xác nhận | `200`, không đổi |
 
 Mọi chuyển là `UPDATE ... WHERE status = <từ>` (BR-18); 0 dòng sau khi qua kiểm tra → đọc lại, trả `409`.
+
+### Chốt khi làm T3.5 (2026-11-25, A duyệt)
+
+- **Ai xem được đơn (route 2, BR-19):** người thuê chủ đơn; chủ tin khi quản trị viên **đã bàn giao** (`admin_confirmed_at`) hoặc đơn `REFUNDED` — chủ trọ cần mở đơn để xác nhận (route 7); admin. Còn lại `403`. **Danh sách** của chủ trọ (route 1) chỉ có đơn đã xác nhận (`seller_acknowledged_at`) hoặc `REFUNDED` (BR-11).
+- **`allowedActions`:** `CONFIRM_MOVE_IN` (người thuê, `PAID`), `REQUEST_REFUND` (người thuê, `PAID`, `now() <= refund_deadline_at`), `ACKNOWLEDGE` (chủ tin, đã bàn giao, chưa xác nhận), `HAND_OVER` (admin, `PAID`/`RELEASED`, chưa bàn giao).
+- **Đơn trả về (`DepositDto`):** `id, listingId, listingTitle, tenantId, ownerId, amountVnd, status, paidAt, refundDeadlineAt, autoReleaseAt, adminConfirmedAt, sellerAcknowledgedAt, releasedAt, releaseTrigger, refundedAt, withdrawnAt, createdAt, allowedActions`; `checkoutUrl, qrCode, expiresAt` chỉ khi người gọi là người thuê và đơn `PENDING_PAYMENT`.
+- **Route 1, 5:** phân trang `page/pageSize` (`api-convention §4`), `ORDER BY created_at DESC, id DESC`; lọc `status` tùy chọn. Route 5 không truyền `status` → `PAID` chưa bàn giao.
+- **Route 4 gửi payment lỗi** (mọi loại, kể cả 4xx): đơn vẫn `REFUND_REQUESTED`, trả `200`; `SagaReconcileJob` (c) gửi lại mỗi lượt tới khi thành công (`refund_synced_at`), log `warn`. Không có kết cục cuối: yêu cầu hoàn phải tới quản trị viên (BR-12).
+- **Đồng bộ tin:** route 3 và `AutoReleaseJob` đẩy `RENTED` ngay sau commit (lỗi → `SagaReconcileJob` (b)); `payment.refunded` chỉ đặt đích `AVAILABLE`, job (b) đẩy (handler không gọi HTTP).
+- **Sự kiện đến khi đơn không ở trạng thái chờ:** `UPDATE` 0 dòng → bỏ qua, log `warn`; `payment.refunded` `SYSTEM` → bỏ qua, log `info`; `withdrawal-completed` cho đơn `REFUNDED` → chỉ đặt `withdrawn_at` nếu còn trống.
 
 ## 2. API nội bộ
 
@@ -96,7 +106,7 @@ BR-15 (sửa 2026-11-12):
 | `REFUND_WINDOW_SECONDS` | `172800` (48 giờ) | Báo cáo Bảng 5.1, đổi đơn vị theo A3 |
 | `AUTO_RELEASE_SECONDS` | `259200` (72 giờ) | Báo cáo Bảng 5.1, đổi đơn vị theo A3 |
 | `RELEASE_REMINDER_SECONDS` | `86400` (24 giờ) | Báo cáo Bảng 5.1, đổi đơn vị theo A3 |
-| `AUTO_RELEASE_INTERVAL_MS`, `DEADLINE_INTERVAL_MS` | `10000`, `10000` | Chốt 2026-11-16 |
+| `AUTO_RELEASE_INTERVAL_MS`, `DEADLINE_INTERVAL_MS` | `10000`, `10000`; `0` tắt lịch (test gọi `runOnce`) | Chốt 2026-11-16; `0` thêm 2026-11-25 |
 
 Demo rút ngắn xuống vài chục giây. Báo cáo cuối kỳ sửa tên biến ở Bảng 5.1.
 
@@ -117,7 +127,15 @@ CREATE TABLE audit_log (
 CREATE INDEX ix_audit_log_target ON audit_log (target_type, target_id, created_at);
 ```
 
-Cùng khuôn với `audit_log` của payment (`RE.PAYOUT/API_Spec.md`). Lần bàn giao lặp lại (idempotent, `200` không đổi) không ghi thêm dòng.
+Cùng khuôn với `audit_log` của payment (`RE.PAYOUT/API_Spec.md`). Lần bàn giao lặp lại (idempotent, `200` không đổi) không ghi thêm dòng. Nội dung (T3.5): `action='HAND_OVER'`, `target_type='DEPOSIT'`, `before {status, adminConfirmedAt: null}`, `after {status, adminConfirmedAt, adminConfirmedBy}`, `correlation_id` của request.
+
+Index thêm (T3.5, `non-functional-standards §1`):
+
+```sql
+CREATE INDEX ix_deposits_status_created ON deposits (status, created_at DESC);            -- route 5 lọc theo trạng thái
+CREATE INDEX ix_deposits_refund_sync ON deposits (updated_at)
+  WHERE status = 'REFUND_REQUESTED' AND refund_synced_at IS NULL;                          -- SagaReconcileJob (c)
+```
 
 ## 8. Đã chốt 2026-11-16
 
