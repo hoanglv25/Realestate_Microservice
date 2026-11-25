@@ -1,126 +1,119 @@
 ---
-task: T3.3 Saga: bù trừ, đối soát, đồng bộ listing
-created: 2026-11-22
+task: T3.4b Hết hạn giữ chỗ
+created: 2026-11-25
 status: in_progress
-phase: implementation/PHASE-3.md#T3.3
-branch: feature/T3.3-saga-compensation (từ `develop` tại `6d03f6c`, sau PR #28 T3.4a)
+phase: implementation/PHASE-3.md#T3.4b
+branch: feature/T3.4b-hold-expiry (từ `develop` tại `207abc1`, sau PR #29 T3.3)
 ---
 
 ## Mô tả
 
-Hoàn thiện nhánh lỗi của saga đặt cọc: `CompensationService.cancelAfterHold` (tạo order `BUSINESS_ERROR`/`NOT_EXECUTED` → đơn `CANCELLED`, đích listing `AVAILABLE`, outbox `rental.deposit-cancelled`), `ListingSyncService.push` (đẩy `listing_target_status` sang listing, C20), `SagaReconcileJob` (a) đối soát đơn kẹt chưa có order, (b) đẩy lại đích listing chưa đồng bộ — gồm `DEPOSITED` sau `payment.deposited` (hiện tin giữ `HELD` sau khi đơn `PAID`). Người làm: A cùng Claude. Hạn M2 — 2026-12-04, ước ~10 giờ.
+`HoldExpiryJob` (BR-09): đơn `PENDING_PAYMENT` quá `expires_at` → hủy order/link payOS ở payment **trước**, rồi `EXPIRED` + đích listing `AVAILABLE` + outbox `rental.deposit-expired`, rồi đẩy `AVAILABLE` sang listing. Người làm: A cùng Claude. Hạn M2 — 2026-12-04, ước ~4 giờ. Phụ thuộc T3.4a (đã tick).
 
 ## Thiết kế liên quan
 
-`design/RENTAL/RE.DEPOSIT_SAGA/` v1.2 (`Processing_Flow §3`, `Component_Class_Design §3, §5, §7, §8`, `API_Spec §2, §5, §8`), `RE.LISTING/API_Spec.md §2.2` (`PUT /internal/listings/:id/status`), `contracts/openapi/listing-internal.v1.yaml`, `payment-internal.v1.yaml`, `contracts/events/rental.deposit-cancelled.v1`. **C20 đã chốt 2026-11-22** (kết cục cuối). `architecture.md §5`: công việc nền dùng `@nestjs/schedule`. Hợp đồng: **không đổi**.
+`design/RENTAL/RE.DEPOSIT_SAGA/` v1.3: `Processing_Flow §4` (sơ đồ hết hạn), `Component_Class_Design §7` (bảng job), `§8` test 11–13, 16; `API_Spec §2` (`POST /internal/payment-orders/:depositId/cancel`), `§3` (`rental.deposit-expired`), `§5` (`HOLD_EXPIRY_INTERVAL_MS` 5000, `HOLD_TTL_SECONDS`). Hợp đồng: `contracts/openapi/payment-internal.v1.yaml` (`cancelPaymentOrder`: 200 / 404 `PAYMENT_ORDER_NOT_FOUND` / 409 `PAYMENT_ORDER_ALREADY_PAID` / 503), `contracts/events/rental.deposit-expired.v1.schema.json` — **không đổi**. Không `[cần xác nhận]` mở nào chạm T3.4b (C20 đã chốt; C24 không chặn).
 
 ## Definition of Done
 
-- [x] Test 3–8, 17 ở `RE.DEPOSIT_SAGA/Component_Class_Design.md §8` pass (+ C20) — 3, 4, 6 có từ T3.2; 5, 7, 8, 17, C20 mới (2026-11-22)
-- [x] rental `test` 177/177, `test:e2e` 97/97 (môi trường Claude); `test:infra` **40/40 trên máy A** (2026-11-23 00:17: rental 18, saga-compensation 8, messaging 8, storage 6)
-- [x] `pnpm lint`, `format:check`, `build`, `contracts:check` sạch
-- [x] Số truy vấn: thành công 5; nhánh bù trừ 7 (đếm trong infra-spec, A chấp nhận B4)
-- [x] Kiểm chứng (`PHASE-3.md`): dừng `payment` → đặt cọc → `504` (C24) → bật lại → job (a) `CANCELLED`, tin `AVAILABLE` (E8); đơn `PAID` → tin `DEPOSITED` (2026-11-23)
-- [x] `RE.DEPOSIT_SAGA` v1.3 (đóng §8 C20) + `CHANGELOG.md`; walkthrough rental; `CLAUDE.md §2.5`; `.env.example` (gốc, rental), compose
+- [x] Test 11–13, 16 ở `RE.DEPOSIT_SAGA/Component_Class_Design.md §8` pass — unit `hold-expiry.job.spec.ts` (13), infra `saga-compensation.infra-spec.ts` (6 mới; 16 với đơn `EXPIRED` do job) (2026-11-25)
+- [x] rental `test` **196/196**, `test:e2e` **97/97** (môi trường Claude); `test:infra` **46/46 trên máy A** (2026-11-25 14:33: rental, saga-compensation, messaging, storage)
+- [x] `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm contracts:check` không lỗi (2026-11-25)
+- [x] Số truy vấn `HoldExpiryJob` đếm bằng log SQL: một lượt 1 đơn = **5** (1 `SELECT` + 4), trong ngưỡng ghi 6 mỗi đơn
+- [x] Kiểm chứng (`PHASE-3.md`, máy A, compose, 2026-11-25): `HOLD_TTL_SECONDS=60`, đơn `934afcdc…` tin 20 không thanh toán → `EXPIRED` sau **~65 giây** (hạn 07:44:20.94Z, `EXPIRED` 07:44:25.82Z: 4,9 giây sau hạn), `saga_log CANCEL_PAYMENT_ORDER OK {"status": 200}`, order `100002` `CANCELLED`, tin `AVAILABLE`, `held_by_deposit_id` trống, đã đồng bộ (E4); webhook giả `orderCode` 100002, 6.000.000đ → `late_payments` có dòng, `refund_request_id` có giá trị (E5)
+- [x] `RE.DEPOSIT_SAGA` v1.4 + `CHANGELOG.md`; walkthrough rental; dòng `CLAUDE.md §2.5`; `.env.example` (gốc, rental), compose
 
 ## Các bước thực hiện (tổng quan)
 
-- [x] 1. Đọc context, đối chiếu thiết kế (2026-11-22)
-- [x] 2. Quét tái sử dụng + kế hoạch (dưới) — A duyệt cả B1–B7 (2026-11-22; B4 chấp nhận 7 ở nhánh bù trừ; B5 đồng ý @nestjs/schedule@12.0.3)
-- [x] 3. Thêm `@nestjs/schedule` **6.1.3** (A duyệt `pnpm add`; 12.0.3 là ESM thuần, không chạy được — xem dưới), env `SAGA_RECONCILE_INTERVAL_MS`, `SAGA_STUCK_AFTER_SECONDS`
-- [x] 4. TDD: `ListingSyncService.push` (OK, C20, lỗi tạm)
-- [x] 5. TDD: `CompensationService.cancelAfterHold`; nối vào `DepositSagaService.createOrder`
-- [x] 6. TDD: `SagaReconcileJob` (a), (b)
-- [x] 7. Test hạ tầng (5, 6, 7, 8, 17, C20), đếm truy vấn
-- [ ] 8. Kiểm chứng compose; thiết kế v1.3, walkthrough, `code-review`, commit
+- [x] 1. Đọc context, đối chiếu thiết kế (2026-11-25)
+- [x] 2. Quét tái sử dụng + kế hoạch chi tiết — A duyệt cả B1–B7 (2026-11-25 14:15)
+- [x] 3. Thiết kế v1.4 (chi tiết B1–B4, B6, B7, B5) trước code (2026-11-25)
+- [x] 4. Env `HOLD_EXPIRY_INTERVAL_MS` (TDD: spec đỏ → xanh 12/12)
+- [x] 5. TDD: `IntervalJob` (5 test, đỏ → xanh), `SagaReconcileJob` kế thừa (7 test cũ không sửa, xanh), `HoldExpiryJob` (13 test, đỏ → xanh), đăng ký module
+- [x] 6. Test hạ tầng (11, `404`, 12, 13, 16, đơn chưa hết hạn), đếm truy vấn 5
+- [x] 7. Walkthrough, `code-review` 5 chiều, commit; `test:infra` 46/46 và kiểm chứng E4/E5 trên máy A (2026-11-25) — còn push, PR
 
 ## Tái sử dụng
 
-Quét `services/rental/src`, `services/_template-nest/src`, `services/payment/src`:
+> Quét 2026-11-25 · Nguồn: `services/rental/src`, `services/rental/test`, `services/_template-nest/src`, `services/*/src` (phát hiện trùng), `contracts/openapi/payment-internal.v1.yaml`, `contracts/events/`, `services/rental/package.json` · Cách tra: grep `addInterval|setInterval|SchedulerRegistry|@Interval|@Cron`, `running`, `cancelOrder|cancel`, `deposit-expired`, `HOLD_EXPIRY|HOLD_TTL`, `EXPIRED`; đọc `saga-reconcile.job.ts`, `compensation.service.ts`, `payment.client.ts`, `call-outcome.ts`, `saga-log.ts`, `saga-compensation.infra-spec.ts`
+> Vùng mù: không
 
-| Nhu cầu | Quyết định | Chỗ có sẵn |
+| Thành phần cần | Nhóm | Vị trí đã có / lý do viết mới |
 |---|---|---|
-| Phân loại lỗi lời gọi (`classify(err)` của thiết kế) | DÙNG LẠI | `rental/clients/call-outcome.ts` `classifyCall` (T3.2) |
-| Đổi trạng thái tin, tra/hủy order | DÙNG LẠI | `ListingClient.changeStatus`, `PaymentClient.getOrder` (T3.2) |
-| Ghi `saga_log` | MỞ RỘNG (tách hàm cục bộ dùng chung trong rental) | `DepositSagaService.log` (private) → `rental/services/saga-log.ts` |
-| Outbox trong transaction | DÙNG LẠI | `OutboxService.add` |
-| Chạy định kỳ | DÙNG LẠI thư viện đã chọn | `@nestjs/schedule` (`architecture.md §5`), `SchedulerRegistry.addInterval` theo biến môi trường |
-| Máy chủ listing/payment giả cho test | DÙNG LẠI | `test/helpers/http-upstream.ts`, cách dựng trong `rental.infra-spec.ts` |
-| `CompensationService`, `ListingSyncService`, `SagaReconcileJob` | VIẾT MỚI | Nghiệp vụ rental (`Component_Class_Design §1`) |
-
-Không chạm `_template-nest`; không thành phần dùng chung mới ngoài `src/rental/`.
+| Hủy order ở payment | DÙNG LẠI | `src/rental/clients/payment.client.ts#PaymentClient.cancelOrder` (T3.2, `idempotent: true`, timeout `PAYMENT_CALL_TIMEOUT_MS`) |
+| Phân loại lỗi lời gọi | DÙNG LẠI | `src/rental/clients/call-outcome.ts#classifyCall` |
+| Mã lỗi + `details` ghi log/`saga_log` | DÙNG LẠI | `src/rental/services/saga-log.ts#errorDetail`, `#sagaLogRow` |
+| Đẩy `AVAILABLE` sang listing (C20, đánh dấu đồng bộ) | DÙNG LẠI | `src/rental/services/listing-sync.service.ts#ListingSyncService.push`; lỗi tạm → `SagaReconcileJob` (b) |
+| Outbox trong transaction | DÙNG LẠI | `src/messaging/outbox.service.ts#OutboxService.add` |
+| Chống đua theo trạng thái | DÙNG LẠI (cách làm) | `UPDATE ... WHERE status='PENDING_PAYMENT'` như `CompensationService.cancelAfterHold` |
+| Khung chạy định kỳ (addInterval theo env, `0` tắt, bỏ lượt chồng, nuốt lỗi lượt, dọn khi tắt) | **MỞ RỘNG** (B5) | Hiện chỉ nằm trong `src/rental/jobs/saga-reconcile.job.ts#SagaReconcileJob` (`onApplicationBootstrap`, `tick`, `onApplicationShutdown`). Tách thành lớp cơ sở `src/rental/jobs/interval-job.ts#IntervalJob` trong rental (không phải phần kỹ thuật chung: `@nestjs/schedule` chỉ rental dùng → không chạm `_template-nest`). `OutboxRelay` của template có khung riêng (Promise), không dùng chung được |
+| Máy chủ listing/payment giả, đếm truy vấn, kiểm hợp đồng sự kiện | MỞ RỘNG | `test/saga-compensation.infra-spec.ts`: thêm route `POST /internal/payment-orders/:id/cancel` (chế độ 200/404/409/503) vào payment giả, thêm `describe('HoldExpiryJob')`; `test/helpers/contracts.ts#expectEventMatchesContract` |
+| Payload `rental.deposit-expired` | DÙNG LẠI (schema) | `contracts/events/rental.deposit-expired.v1.schema.json` — cùng 4 trường với `DepositCancelledPayload` (`compensation.service.ts`); khai interface `DepositExpiredPayload` trong `hold-expiry.job.ts` |
+| `HoldExpiryJob` | VIẾT MỚI | Nghiệp vụ rental (`Component_Class_Design §1`: `jobs/hold-expiry.job.ts`); grep `HoldExpiry|EXPIRED` trong `src/rental`: chưa có xử lý |
 
 ## Kế hoạch chi tiết
 
-> A duyệt 2026-11-22. TDD bật (`warn`).
+> **A duyệt cả B1–B7 (2026-11-25 14:15).** TDD bật (`warn`): mỗi hành vi RED → GREEN → REFACTOR.
 
 ### A. Phạm vi
 
-| Có trong T3.3 | Để sau |
+| Có trong T3.4b | Để sau / không làm |
 |---|---|
-| Bù trừ khi tạo order `BUSINESS_ERROR`/`NOT_EXECUTED` (test 5); `UNKNOWN` giữ `PENDING_PAYMENT` + `saga_log` (test 6, đã có từ T3.2) | `HoldExpiryJob` (T3.4b, test 11–13) |
-| Job (a): đơn `PENDING_PAYMENT`, chưa có `payment_order_id`, quá `SAGA_STUCK_AFTER_SECONDS` → `getOrder`: có → gắn order; `404` → `cancelAfterHold` (test 7, 8) | Vòng đời đơn (T3.5) |
-| Job (b): `listing_target_status` chưa đồng bộ → `push` (AVAILABLE sau bù trừ, DEPOSITED sau `PAID`) (test 17, C20) | |
+| `HoldExpiryJob`: chọn đơn, hủy order, `EXPIRED`, outbox, đẩy `AVAILABLE` (test 11, 12, 13) | Hoàn tiền khi tiền đến sau `EXPIRED` — payment đã làm ở T3.4a (`late_payments`, BR-10); T3.4b chỉ kiểm chứng E5 |
+| Test 16 hạ tầng thật (`payment.deposited` khi đơn `EXPIRED` → không đổi; unit có từ T3.2) | Vòng đời đơn `DeadlineJob`, `AutoReleaseJob` (T3.5) — dùng lại `IntervalJob` nếu B5 duyệt |
+| Env `HOLD_EXPIRY_INTERVAL_MS` | C24 (timeout DNS Docker) — chờ A2 |
 
 ### B. Điểm cần A quyết (đề xuất)
 
 | # | Chỗ | Đề xuất |
 |---|---|---|
-| 1 | C20 chỉ nói `409 LISTING_INVALID_STATUS`; các 4xx khác của listing khi đẩy trạng thái (`404 LISTING_NOT_FOUND`, `400`) | Mọi 4xx (`BUSINESS_ERROR`) đều là **kết cục cuối** như C20 — đúng câu "chỉ `503`/`504`/lỗi kết nối mới đẩy lại" của `API_Spec §8`; đẩy lại 4xx không bao giờ thành công |
-| 2 | Lỗi tạm khi đẩy (`503`/`504`/kết nối) | Chỉ log `warn`, **không** ghi `saga_log` mỗi lượt (job 15 giây/lần sẽ làm phình `saga_log`); `saga_log SYNC_LISTING` chỉ ghi kết cục cuối `BUSINESS_ERROR`. Thành công chỉ đặt `listing_synced_at` |
-| 3 | `cancelled_reason` (varchar, thiết kế chưa liệt kê giá trị) | `PAYMENT_ORDER_REJECTED` (payment 4xx), `PAYMENT_UNAVAILABLE` (không gửi được), `PAYMENT_ORDER_NOT_FOUND` (job (a) thấy `404`) |
-| 4 | Số truy vấn `POST /deposits` **nhánh bù trừ** (ngưỡng ghi 6) | 7: đơn + `saga_log` + outbox (3) → bù trừ một transaction: `UPDATE` đơn + `saga_log CREATE_PAYMENT_ORDER` (kết quả lỗi) + outbox `deposit-cancelled` (3) → đẩy `AVAILABLE` thành công: `UPDATE listing_synced_at` (1). Nhánh thành công giữ 5. Xin chấp nhận 7 ở nhánh lỗi |
-| 5 | Thư viện `@nestjs/schedule` | `pnpm add @nestjs/schedule@12.0.3 --filter @realestate/rental` (đã có trong `architecture.md §5`; 12.0.3 phát hành 2026-11-06, đủ ≥ 2 tuần; 12.0.4 mới 9 ngày) |
-| 6 | Chạy job | `SchedulerRegistry.addInterval` lúc khởi động theo `SAGA_RECONCILE_INTERVAL_MS` (mặc định 15000; `0` = tắt, dùng cho test); chặn chạy chồng (lượt trước chưa xong thì bỏ lượt); mỗi lượt tối đa 50 đơn mỗi phần; một đơn lỗi không chặn đơn khác; một bản sao rental (`Component_Class_Design §7`, đã chốt) |
-| 7 | Đánh dấu đồng bộ | `UPDATE deposits SET listing_synced_at = now() WHERE id = $1 AND listing_target_status = $target AND listing_synced_at IS NULL` — nếu đích vừa đổi (ví dụ `PAID` giữa lúc đẩy `AVAILABLE`) thì không đánh dấu nhầm |
+| 1 | `HOLD_EXPIRY_INTERVAL_MS` (thiết kế chỉ có mặc định 5000) | `0` = tắt lịch, như `SAGA_RECONCILE_INTERVAL_MS` (test gọi `runOnce()`); Joi `integer, min 0, max 3600000, default 5000`. Ghi `API_Spec §5` v1.4 |
+| 2 | `saga_log` khi hết hạn (§7 không nói) | Ghi `saga_log CANCEL_PAYMENT_ORDER OK {status: 200 \| 404}` **trong** transaction `EXPIRED` (bước đã có trong enum và DDL) — để tra vì sao đơn `EXPIRED` và order có hay không; cùng cách T3.3 ghi bước lỗi trong transaction bù trừ. Không ghi thì bớt 1 truy vấn |
+| 3 | `409 PAYMENT_ORDER_ALREADY_PAID` (webhook thắng) | Bỏ qua đơn, log `info` (không `warn`, không `saga_log`: job 5 giây/lần sẽ lặp tới khi `payment.deposited` tới, thường vài giây) |
+| 4 | Lỗi khác của `cancel` | `503 PAYMENT_PROVIDER_UNAVAILABLE`, `504`, lỗi kết nối, **và mọi 4xx khác** (`400`…) → giữ `PENDING_PAYMENT`, log `warn`, lượt sau thử lại (test 13). Lý do: chưa chắc link đã hủy thì không nhả chỗ (BR-09 "hủy link trước"). Chỉ `200`/`404` mới `EXPIRED` |
+| 5 | Khung chạy định kỳ lặp lại | Tách `IntervalJob` (lớp cơ sở trừu tượng, `src/rental/jobs/interval-job.ts`): `name`, `intervalMs`, `runOnce()`; lo `addInterval`, `0` tắt, bỏ lượt khi lượt trước chưa xong, lỗi lượt chỉ log `warn`, xóa interval khi tắt. `SagaReconcileJob` chuyển sang kế thừa — refactor **không đổi hành vi**, test cũ giữ nguyên và phải xanh. Lý do: T3.4b thêm job thứ 2, T3.5 thêm 2 job nữa. Phương án khác: chép ~25 dòng vào `HoldExpiryJob` |
+| 6 | Số truy vấn | Mỗi lượt 1 `SELECT` (`status='PENDING_PAYMENT' AND expires_at < now()`, `ORDER BY expires_at ASC`, `LIMIT 50`, dùng `ix_deposits_expiry`). Mỗi đơn hết hạn: transaction `UPDATE` đơn + `saga_log` (B2) + outbox = 3, đẩy thành công đánh dấu 1 → **4**; listing trả 4xx (C20) đánh dấu + `saga_log` 2 → **5**; ≤ ngưỡng ghi 6. Lời gọi HTTP mỗi đơn: `cancel` 1 + `PUT status` 1 (job xử lý từng đơn, như `SagaReconcileJob` §7). Ghi `Processing_Flow §6` |
+| 7 | `UPDATE` 0 dòng (đơn vừa thành `PAID`/`CANCELLED` giữa `cancel` và transaction) | Dừng, không outbox, không đẩy listing, log `info` (đúng cột "Chống đua" §7) |
 
 ### C. File
 
 | File | Việc |
 |---|---|
-| `services/rental/package.json`, `pnpm-lock.yaml` | `@nestjs/schedule@12.0.3` |
-| `src/rental/config/rental.env.ts` (+spec), `src/config/env.validation.ts` (+spec) | `SAGA_RECONCILE_INTERVAL_MS` (≥ 0, mặc định 15000), `SAGA_STUCK_AFTER_SECONDS` (≥ 1, mặc định 30) |
-| `src/rental/services/saga-log.ts` | Hàm dựng dòng `saga_log` (tách từ `DepositSagaService`) |
-| `src/rental/services/listing-sync.service.ts` (+spec) | `push(deposit)`: gọi `changeStatus`; OK → đánh dấu; 4xx → đánh dấu + `saga_log SYNC_LISTING BUSINESS_ERROR` + `warn`; lỗi tạm → `warn`, để job |
-| `src/rental/services/compensation.service.ts` (+spec) | `cancelAfterHold(deposit, err, reason)`: transaction §5 bước 1; 0 dòng → dừng; sau commit `push` best-effort |
-| `src/rental/services/deposit-saga.service.ts` (+spec) | `createOrder`: `BUSINESS_ERROR`/`NOT_EXECUTED` → `cancelAfterHold` rồi ném lỗi gốc; `UNKNOWN` như cũ |
-| `src/rental/jobs/saga-reconcile.job.ts` (+spec) | `runOnce()`: phần (a), (b); đăng ký interval |
-| `src/rental/rental.module.ts`, `src/app.module.ts` | `ScheduleModule.forRoot()`, provider mới |
-| `test/saga-compensation.infra-spec.ts` | Postgres + Redis thật, listing/payment giả: test 5, 6, 7, 8, 17, C20, đếm truy vấn, `deposit-cancelled` khớp hợp đồng |
-| `.env.example` (gốc, rental), `infra/compose/docker-compose.yml` | Hai biến mới |
-| `design/RENTAL/RE.DEPOSIT_SAGA/*` v1.3 + `CHANGELOG.md` | Đóng §8 C20, mục B1–B4, B7 |
-| `guides/RE_Rental_Code_Walkthrough.md`, `CLAUDE.md §2.5` | Cập nhật |
+| `project-knowledge/design/RENTAL/RE.DEPOSIT_SAGA/API_Spec.md` | §5: `HOLD_EXPIRY_INTERVAL_MS` `0` tắt (B1) |
+| `.../Component_Class_Design.md` | §7: chi tiết `HoldExpiryJob` (B2–B5, B7); §1 thêm `interval-job.ts` (nếu B5) |
+| `.../Processing_Flow.md` | §6: số truy vấn `HoldExpiryJob` (B6) |
+| `.../CHANGELOG.md` | v1.4 (MINOR), không đổi route, mã lỗi, hợp đồng |
+| `services/rental/src/config/env.validation.ts` (+ `.spec.ts`) | `HOLD_EXPIRY_INTERVAL_MS` |
+| `services/rental/.env.example`, `.env.example` gốc, `infra/compose/docker-compose.yml` | Thêm biến (cùng commit) |
+| `services/rental/src/rental/jobs/interval-job.ts` (+ `.spec.ts`) | MỚI (B5) |
+| `services/rental/src/rental/jobs/saga-reconcile.job.ts` | Kế thừa `IntervalJob` (B5), không đổi hành vi |
+| `services/rental/src/rental/jobs/hold-expiry.job.ts` (+ `.spec.ts`) | MỚI |
+| `services/rental/src/rental/rental.module.ts` | Đăng ký `HoldExpiryJob`, `HOLD_EXPIRY_CONFIG`; sửa chú thích module |
+| `services/rental/test/setup-infra-env.ts` | `HOLD_EXPIRY_INTERVAL_MS: '0'` |
+| `services/rental/test/saga-compensation.infra-spec.ts` | Payment giả thêm `/cancel`; `describe('HoldExpiryJob')` |
+| `project-knowledge/guides/RE_Rental_Code_Walkthrough.md`, `project-knowledge/CLAUDE.md §2.5` | Cập nhật (không tạo file mới) |
 
-### D. Test (`Component_Class_Design §8`)
+### D. Test
 
-| # | Tầng | Kiểm |
-|---|---|---|
-| 3, 4 | đã có (T3.2) | Giữ chỗ `409`/`503` → không có đơn |
-| 5 | unit + infra | Tạo order `503` (`NOT_EXECUTED`) và `4xx` → `CANCELLED`, `cancelled_reason`, đích `AVAILABLE`, đã gọi `PUT status`, `deposit-cancelled`, client nhận lỗi gốc |
-| 6 | đã có (T3.2) | Tạo order `504` → `PENDING_PAYMENT`, `saga_log UNKNOWN` |
-| 7 | unit + infra | Job (a): order có → gắn `payment_order_id` (+ `checkout_url`) |
-| 8 | unit + infra | Job (a): `404` → `CANCELLED`, tin `AVAILABLE` (E8) |
-| 17 | unit + infra | Job (b): listing `503` → lượt sau đẩy lại tới khi xong; `PAID` → `DEPOSITED` |
-| C20 | unit + infra | `409 LISTING_INVALID_STATUS` → đánh dấu đồng bộ, `saga_log BUSINESS_ERROR`, `warn`, lượt sau không đẩy lại |
-| Chống đua | unit | Bù trừ khi đơn đã đổi (0 dòng) → dừng, không outbox, không đẩy |
-
-### E. Số truy vấn
-
-| Thao tác | Truy vấn |
+| Tầng | Test |
 |---|---|
-| `POST /deposits` thành công | 5 (không đổi) |
-| `POST /deposits` nhánh bù trừ | 7 (mục B4) |
-| Job (b) mỗi đơn, thành công | 1 (`UPDATE synced`); C20: 2 (+ `saga_log`) |
-| Job (a) mỗi đơn | gắn order 2 (`UPDATE` + `saga_log`); `404` → như bù trừ 3 + đẩy 1 |
-| Mỗi lượt job | + 2 `SELECT` (a), (b), dùng `ix_deposits_listing_sync` và điều kiện `payment_order_id IS NULL` |
+| `test` (`interval-job.spec.ts`) | `0` → không đăng ký; >0 → `addInterval` đúng tên; lượt chồng bị bỏ; lỗi `runOnce` không ném ra; tắt → xóa interval |
+| `test` (`hold-expiry.job.spec.ts`) | **11** `cancel` 200 → `cancelOrder` gọi **trước** transaction; `EXPIRED`, `listingTargetStatus='AVAILABLE'`, `listingSyncedAt=null`, `saga_log`, outbox `rental.deposit-expired`; rồi `push`. `404` → như 11. **12** `409 ALREADY_PAID` → không transaction, không `push`. **13** `503`/`504`/kết nối/`400` → giữ `PENDING_PAYMENT`, không `push`, đơn sau vẫn được xử lý. `UPDATE` 0 dòng → không outbox, không `push`. `push` ném lỗi → đơn vẫn `EXPIRED`, kết quả đếm `failed`/để job (b) |
+| `test` (`saga-reconcile.job.spec.ts`) | Giữ nguyên, phải xanh sau refactor (B5) |
+| `test:infra` (`saga-compensation.infra-spec.ts`) | **11 (E4)**: đơn quá hạn → `runOnce` → `EXPIRED`, `deposit-expired` khớp hợp đồng, thứ tự gọi `cancel` rồi `PUT status AVAILABLE`, tin `AVAILABLE`, đếm truy vấn. **12**: `409` → vẫn `PENDING_PAYMENT`; phát `payment.deposited` → `PAID`. **13**: payment `503` → giữ, lượt sau `200` → `EXPIRED`. **16**: đơn `EXPIRED` nhận `payment.deposited` → không đổi. Đơn chưa hết hạn → job không đụng |
+
+### E. Kiểm chứng (máy A, compose)
+
+1. `.env`: `HOLD_TTL_SECONDS=60` (`HOLD_EXPIRY_INTERVAL_MS` mặc định 5000), `pnpm infra:up` + apps.
+2. Đặt cọc một tin qua gateway (tạo link payOS thật — không trả tiền), ghi `orderCode`.
+3. Chờ: đơn `EXPIRED` trong ≤ 70 giây sau khi tạo; order payment `CANCELLED`; tin `AVAILABLE` (E4). Ghi thời điểm thật.
+4. `pnpm --filter @realestate/payment webhook:fake -- --order-code <orderCode> --amount <tiền cọc>` → `late_payments` có dòng, yêu cầu hoàn tạo (E5, BR-10 — code T3.4a).
+
+### F. Thứ tự
+
+Thiết kế v1.4 → env → `IntervalJob` (TDD) → refactor `SagaReconcileJob` (test cũ xanh) → `HoldExpiryJob` (TDD theo D) → module → infra-spec → lint/format/build/contracts → kiểm chứng (A) → walkthrough → `code-review` → commit, PR.
 
 ## Blockers / Ghi chú
 
-- Cần A: duyệt mục B (đặc biệt B4 vượt ngưỡng ở nhánh lỗi, B5 thêm thư viện).
-- Máy ảo Cowork không push được, không gọi được `localhost` Windows: A chạy git, compose, kiểm chứng.
-- **Lệch so với kế hoạch:** (1) `@nestjs/schedule` **6.1.3** thay vì 12.0.3 đã duyệt: 12.x có `"type": "module"` (ESM thuần), rental biên dịch CommonJS và Jest báo "Must use import to load ES Module"; 6.1.3 (2026-04-15) hỗ trợ Nest 10/11, đủ ≥ 2 tuần. (2) `onApplicationShutdown` chỉ xóa interval nếu còn (`ScheduleModule` tự dọn trước). (3) `test/setup-infra-env.ts` đặt `SAGA_RECONCILE_INTERVAL_MS=0` để job không tự chạy giữa test (trước đó jest không thoát).
-- **2026-11-22 code-review 5 chiều (T3.3): không CRITICAL, không MAJOR.** Security: không route mới; log/`saga_log` chỉ id, mã lỗi, status, `details` trạng thái tin (không dữ liệu cá nhân). Performance: thành công 5, bù trừ 7 (A chấp nhận), job 2 `SELECT`/lượt + 1–3/đơn, `take: 50`, điều kiện trùng `ix_deposits_listing_sync`. Correctness: bù trừ chỉ khi chắc payment chưa có order; mọi đổi trạng thái `UPDATE ... WHERE` trạng thái; không HTTP trong transaction; đánh dấu đồng bộ chỉ khi đích chưa đổi; một đơn lỗi không chặn đơn khác; không chạy chồng. Style: file theo `Component_Class_Design §1` (`jobs/`), controller không đổi, biến môi trường khai đủ. Reuse: `classifyCall`, client có sẵn; tách `saga-log.ts` để bỏ lặp; không import chéo service.
-- **TDD:** unit env, `listing-sync`, `compensation`, `deposit-saga` (nhánh lỗi), `saga-reconcile.job` đều RED trước. `test/saga-compensation.infra-spec.ts` viết sau code → đột biến: C20 không phải kết cục cuối → 1 đỏ; bỏ bù trừ → 4 đỏ; đánh dấu không kiểm đích (unit) → 2 đỏ; trả lại → xanh (tech-debt #24).
-- **Chạy thật** (`node dist/main.js`, `SAGA_RECONCILE_INTERVAL_MS=2000`): job chạy mỗi 2 giây, đơn `CANCELLED` chưa đồng bộ → `warn` "chưa đẩy được" (listing không chạy), `/health` db, redis, rabbitmq `up`, không lỗi.
-- **Còn lại cho A:** `pnpm install --frozen-lockfile`; `pnpm --filter @realestate/rental test:infra` đủ bộ; dựng lại `rental` trong compose; kiểm chứng `PHASE-3.md` (dừng `payment` → đặt cọc → `503`, tin `AVAILABLE`) và đơn `PAID` → tin `DEPOSITED`; commit + PR.
-- **Kiểm chứng compose (2026-11-23 00:10, A):** (1) đơn `PAID` lúc 23:29 → job (b) đẩy → tin `58fe028e…` `DEPOSITED` (hết lỗi tin còn `HELD`). (2) `docker stop re-payment` → đặt cọc → `504 UNKNOWN` sau 9,35 giây (không phải `503` như PHASE-3 dự đoán: DNS Docker trả `ENOTFOUND` sau 3.936 ms > timeout 3.000 ms, ghi C24) → đơn `PENDING_PAYMENT`; bật lại payment → job (a): `404` → đơn `CANCELLED`, `PAYMENT_ORDER_NOT_FOUND`, đã đẩy; tin `c3e2ea29…` `AVAILABLE` (E8). Nhánh `NOT_EXECUTED` → `503` ngay được kiểm ở infra-spec bằng cổng đóng (`ECONNREFUSED`).
+- **Môi trường chạy test (2026-11-25):** máy ảo trên máy A không đọc được `node_modules` (junction của pnpm trên Windows). Claude clone `develop` vào môi trường riêng, `pnpm install --frozen-lockfile`, chạy test ở đó, rồi chép 13 file code về máy A (mã băm khớp). Hạ tầng cho `test:infra`: Postgres 16, Redis, RabbitMQ cài trực tiếp, nạp `infra/rabbitmq/definitions.json` thật; S3 (image `silo`) không có → `storage.infra-spec` (6 test, template) chưa chạy.
+- **code-review 5 chiều (2026-11-25):** không CRITICAL/MAJOR. MINOR: `DepositExpiredPayload` trùng hình với `DepositCancelledPayload` (giữ riêng theo hợp đồng sự kiện); log lỗi lượt của `SagaReconcileJob` đổi tiền tố từ tên lớp sang `saga-reconcile`.

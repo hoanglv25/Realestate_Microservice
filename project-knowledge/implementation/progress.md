@@ -48,7 +48,7 @@
 
 - [x] T3.1 payment: khung, payment order, payOS — A (2026-11-21, PR #26, `e231b32`; A tự giao lại từ C)
 - [x] T3.2 rental: khung, lịch xem, saga luồng thành công — A (2026-11-22, PR #27, `8021431`; kiểm chứng payOS thật chuyển sang T3.4a)
-- [ ] T3.3 Saga: bù trừ, đối soát, đồng bộ listing — C
+- [x] T3.3 Saga: bù trừ, đối soát, đồng bộ listing — A (2026-11-23, PR #29, `207abc1`; giao lại từ C theo chốt 2026-11-18)
 - [x] T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn — A (2026-11-22, PR #28, `6d03f6c`; gồm kiểm chứng payOS thật chuyển từ T3.2)
 - [ ] T3.4b Hết hạn giữ chỗ — A (tách 2026-11-22)
 - [ ] T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân — B (chuyển từ C 2026-11-16)
@@ -100,3 +100,5 @@
 | 2026-11-22 | A | T3.4a kiểm chứng **payOS thật**: cloudflared → gateway 8080; payOS chấp nhận URL webhook; `orderCode` 100001 chuyển 2.000đ thật → webhook chữ ký đúng, `PAID`; order `PAID`, ví 2.000; `payment.deposited` qua RabbitMQ → đơn rental `PAID` (`paid_at` khớp `transactionDateTime`). Đây cũng là mục DoD payOS thật chuyển từ T3.2. payment `test:infra` 49/49 trên máy A | Commit, PR T3.4a; sau merge tick T3.4a; tiếp T3.3 (chốt C20) |
 | 2026-11-22 | A | T3.4a merge vào `develop` (PR #28, `6d03f6c`). Luồng đặt cọc thành công chạy với tiền thật: rental → payment → payOS → webhook → `payment.deposited` → đơn `PAID`. Mốc M1 (2026-11-27, "saga luồng thành công chạy được") đạt sớm 5 ngày. Còn: tin ở listing giữ `HELD` sau `PAID` (đẩy `DEPOSITED` là T3.3, chờ C20) | Tick T3.4a; tiếp T3.3 hoặc T3.4b |
 | 2026-11-23 | A | T3.3 kiểm chứng compose: đơn `PAID` → tin `DEPOSITED` (job (b)); dừng payment → đặt cọc `504` (DNS Docker chậm 3,9 giây > timeout, **C24** chờ A) → bật lại → job (a) bù trừ, tin `AVAILABLE` (E8). C20 chốt, áp ở `ListingSyncService` | Merge T3.3; quyết C24 khi chốt A2 (E1, E2) |
+| 2026-11-23 | A | T3.3 merge vào `develop` (PR #29, `207abc1`), CI `check`, `test` (template-nest, identity, api-gateway, listing, payment, rental), `ci` xanh. rental unit 177, e2e 97, `test:infra` 40/40 PASS. Có: bù trừ (`CompensationService`), đồng bộ listing (`ListingSyncService`; C20: 4xx từ listing là kết cục cuối), `SagaReconcileJob` (`@nestjs/schedule` 6.1.3, 12.x là ESM thuần). Số truy vấn `POST /deposits`: thành công 5, bù trừ 7 (A chấp nhận). `RE.DEPOSIT_SAGA` v1.3. Còn mở: C24 (payment dừng → `504` thay vì `503`) | Tick T3.3; tiếp T3.4b (`HoldExpiryJob`), rồi T3.5 |
+| 2026-11-25 | A | T3.4b kiểm chứng compose: `HOLD_TTL_SECONDS=60`, đặt cọc tin 20 không trả → `HoldExpiryJob` hủy order payOS (`100002` `CANCELLED`) rồi đơn `EXPIRED` sau ~65 giây (4,9 giây sau hạn), tin `AVAILABLE` (E4); webhook giả vào link đã hủy → `late_payments` + yêu cầu hoàn (E5). rental unit 196, e2e 97, `test:infra` 46/46 (máy A). `RE.DEPOSIT_SAGA` v1.4; khung job `IntervalJob` | PR T3.4b; sau merge tick T3.4b; tiếp T3.5 |

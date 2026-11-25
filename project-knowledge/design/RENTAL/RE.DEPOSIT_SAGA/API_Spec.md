@@ -7,7 +7,7 @@
 | **Quy tắc** | BR-04, BR-05, BR-06, BR-07, BR-09, BR-18 |
 | **Quyết định** | ADR-0004 (saga tại rental), ADR-0005 (bản chụp), ADR-0009 (payOS) |
 | **CSDL** | `rental_db`: `deposits`, `saga_log`, `outbox_events`, `processed_events`; Redis (khóa theo tin, idempotency) |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-22 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-25 — v1.4 |
 
 ## 1. `POST /api/v1/deposits`
 
@@ -98,7 +98,7 @@ Các sự kiện khác của payment: `RE.DEPOSIT_LIFECYCLE`.
 | `DEPOSIT_LOCK_TTL_MS` | `10000` | Khóa Redis theo tin | Chốt 2026-11-16 |
 | `LISTING_CALL_TIMEOUT_MS` | `2000` | `timeoutMs` cho lời gọi listing | A2 (2026-11-12) |
 | `PAYMENT_CALL_TIMEOUT_MS` | `3000` `[cần đo]` | Phải để tổng ≤ 8 giây; chốt sau khi đo E1, E2 | A2 (2026-11-12) |
-| `HOLD_EXPIRY_INTERVAL_MS` | `5000` | Chu kỳ `HoldExpiryJob`; E4 cần ≤ 10 giây | Chốt 2026-11-16 |
+| `HOLD_EXPIRY_INTERVAL_MS` | `5000` | Chu kỳ `HoldExpiryJob`; E4 cần ≤ 10 giây; `0` tắt lịch (test gọi `runOnce`) | Chốt 2026-11-16; `0` thêm 2026-11-25 |
 | `SAGA_RECONCILE_INTERVAL_MS`, `SAGA_STUCK_AFTER_SECONDS` | `15000`, `30` | `SagaReconcileJob`; `SAGA_RECONCILE_INTERVAL_MS=0` tắt lịch (test gọi `runOnce`) | Chốt 2026-11-16; `0` thêm 2026-11-22 |
 
 `.env` gốc đang có `DEPOSIT_PAYMENT_TTL_SECONDS`, `RESERVATION_TTL_SECONDS`, `PAYMENT_CLAIM_TTL_SECONDS`, `ADMIN_SLA_SECONDS` của luồng cũ → bỏ, thay bằng `HOLD_TTL_SECONDS` và các biến `_SECONDS` ở `RE.DEPOSIT_LIFECYCLE §6` (A3).

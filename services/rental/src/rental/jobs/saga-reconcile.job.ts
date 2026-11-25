@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  OnApplicationBootstrap,
-  OnApplicationShutdown,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, LessThan, Not, Repository } from 'typeorm';
@@ -16,6 +10,7 @@ import { SagaLog } from '../entities/saga-log.entity';
 import { CompensationService } from '../services/compensation.service';
 import { ListingSyncService } from '../services/listing-sync.service';
 import { errorDetail, sagaLogRow } from '../services/saga-log';
+import { IntervalJob } from './interval-job';
 
 export interface SagaReconcileConfig {
   /** `SAGA_RECONCILE_INTERVAL_MS`; `0` tắt (test gọi `runOnce`). */
@@ -47,48 +42,21 @@ export interface ReconcileResult {
  * - (b) Đơn có `listing_target_status` chưa đồng bộ (bù trừ, `PAID` → `DEPOSITED`, hết hạn): `ListingSyncService.push`
  *   (test 17, C20).
  *
- * Một đơn lỗi không chặn đơn khác. Lượt trước chưa xong thì bỏ lượt mới. Một bản sao rental (§7 chốt 2026-11-16:
- * không `FOR UPDATE SKIP LOCKED`); các thay đổi đều là `UPDATE ... WHERE` theo trạng thái nên chạy lại an toàn.
+ * Một đơn lỗi không chặn đơn khác. Lịch chạy, bỏ lượt chồng, nuốt lỗi lượt: `IntervalJob` (T3.4b). Các thay đổi
+ * đều là `UPDATE ... WHERE` theo trạng thái nên chạy lại an toàn.
  */
 @Injectable()
-export class SagaReconcileJob implements OnApplicationBootstrap, OnApplicationShutdown {
-  private readonly logger = new Logger(SagaReconcileJob.name);
-  private running = false;
-
+export class SagaReconcileJob extends IntervalJob {
   constructor(
     @InjectRepository(Deposit) private readonly deposits: Repository<Deposit>,
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(PaymentClient) private readonly payment: PaymentClient,
     @Inject(CompensationService) private readonly compensation: CompensationService,
     @Inject(ListingSyncService) private readonly sync: ListingSyncService,
-    @Inject(SchedulerRegistry) private readonly scheduler: SchedulerRegistry,
+    @Inject(SchedulerRegistry) scheduler: SchedulerRegistry,
     @Inject(SAGA_RECONCILE_CONFIG) private readonly config: SagaReconcileConfig,
-  ) {}
-
-  onApplicationBootstrap(): void {
-    if (this.config.intervalMs <= 0) return;
-    this.scheduler.addInterval(
-      JOB_NAME,
-      setInterval(() => void this.tick(), this.config.intervalMs),
-    );
-  }
-
-  onApplicationShutdown(): void {
-    // ScheduleModule cũng tự dọn interval khi tắt: chỉ xóa nếu còn
-    if (this.scheduler.doesExist('interval', JOB_NAME)) this.scheduler.deleteInterval(JOB_NAME);
-  }
-
-  /** Một lượt theo lịch; bỏ qua nếu lượt trước chưa xong; lỗi không làm dừng lịch. */
-  async tick(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      await this.runOnce();
-    } catch (err) {
-      this.logger.warn(`SagaReconcileJob lỗi (DB?), lượt sau chạy lại: ${(err as Error).message}`);
-    } finally {
-      this.running = false;
-    }
+  ) {
+    super(scheduler, JOB_NAME, config.intervalMs);
   }
 
   async runOnce(): Promise<ReconcileResult> {
