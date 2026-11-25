@@ -19,10 +19,10 @@ branch: feature/T3.5-deposit-lifecycle (từ `develop` tại `ef2abb5`, sau PR #
 ## Definition of Done
 
 - [x] Test 1–16 (gồm 13a, 14a, 14b) ở `RE.DEPOSIT_LIFECYCLE/Component_Class_Design.md §5` pass — unit (1: 360 tổ hợp; 2–4, 6–11, 13–15) + infra `deposit-lifecycle.infra-spec.ts` 21 ca (2–16, E7 ngẫu nhiên + 2 khe đua cố định; gây lỗi thử bỏ `status='PAID'` ở mỗi bên → đỏ) (2026-11-25)
-- [ ] rental `test` **648/648**, `test:e2e` **97/97** (môi trường Claude); `test:infra` 61/61 (rental 18, saga-compensation 14, messaging 8, deposit-lifecycle 21; storage cần S3) — **còn chạy đủ trên máy A**
+- [x] rental `test` **648/648**, `test:e2e` **97/97** (môi trường Claude); `test:infra` **67/67 trên máy A** (2026-11-25 15:39: deposit-lifecycle 21, saga-compensation 14, rental 18, messaging 8, storage 6)
 - [x] `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm contracts:check` không lỗi (2026-11-25)
 - [x] Số truy vấn đếm bằng log SQL: route 2 = 1, 7 = 2, 4 = 3, 3 = 4, 6 = 4, 1/5 ≤ 2 (TypeORM bỏ câu count khi trang đầu ít hơn `pageSize`), `withdrawal-eligibility` = 1 — trong ngưỡng
-- [ ] Kiểm chứng (`PHASE-3.md`): rút `AUTO_RELEASE` → đơn `RELEASED`, BĐS `RENTED` (E6)
+- [x] Kiểm chứng (`PHASE-3.md`, máy A, compose, 2026-11-25): `AUTO_RELEASE_SECONDS=120`, `RELEASE_REMINDER_SECONDS=60`; đơn `46f3767a…` tin 22 `PAID` 08:35:50Z (webhook giả, `orderCode` 100003) → `rental.release-reminder` 08:36:55Z (5 giây sau khi vào cửa sổ nhắc) → `RELEASED` trigger `AUTO` 08:37:55Z (5 giây sau `auto_release_at`), tin `RENTED`, đã đồng bộ (E6). Migration T3.5 áp vào DB compose sau đó bằng `DATABASE_URL` tạm dựng từ `.env` gốc (`services/rental/.env` không có → lần đầu nối cổng 5432): `DepositLifecycle1736000000000` OK
 - [x] `RE.DEPOSIT_LIFECYCLE` v1.2 + `CHANGELOG.md`; walkthrough rental, `CLAUDE.md §2.5`; `.env.example` (gốc, rental), compose
 
 ## Các bước thực hiện (tổng quan)
@@ -34,7 +34,7 @@ branch: feature/T3.5-deposit-lifecycle (từ `develop` tại `ef2abb5`, sau PR #
 - [x] 5. TDD: `deposit-state.ts` (374), `DepositQueryService` (12), `DepositLifecycleService` (43), `PaymentClient.createRefund`, 3 controller
 - [x] 6. TDD: handler 3 sự kiện (11), `AutoReleaseJob` (5), `DeadlineJob` (5), `SagaReconcileJob` (c) (3; test cũ "bỏ lượt chồng" thêm một lần `release` cho lượt `find` thứ ba)
 - [x] 7. Test hạ tầng (gồm E7 đồng thời + khe đua cố định), đếm truy vấn
-- [ ] 8. Walkthrough ✔, `code-review` 5 chiều ✔, commit cục bộ ✔ (không dòng ghi công) — **còn:** `test:infra` đủ + kiểm chứng E6 trên máy A, push, PR
+- [x] 8. Walkthrough, `code-review` 5 chiều, commit (không dòng ghi công); `test:infra` 67/67 và kiểm chứng E6 trên máy A (2026-11-25) — còn push, PR
 
 ## Tái sử dụng
 
