@@ -1,22 +1,23 @@
 ---
-task: T3.4b Hết hạn giữ chỗ
+task: T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân
 updated: 2026-11-25
-percent: 95
+percent: 85
 ---
 
 ## Đang làm
-- Đủ DoD; push, mở PR
+- Chờ A: `test:infra` đủ trên máy A, kiểm chứng E6 (compose); rồi push, PR
 
 ## Đã xong (phiên này)
-- T3.3 merge (PR #29), tick `implementation/progress.md` (`e21409a`)
-- Kế hoạch T3.4b, A duyệt B1–B7; `RE.DEPOSIT_SAGA` v1.4 + CHANGELOG
-- `HOLD_EXPIRY_INTERVAL_MS`; `IntervalJob`; `SagaReconcileJob` kế thừa; `HoldExpiryJob`; đăng ký module
-- rental unit 196, e2e 97, infra 40 (rental 18, saga-compensation 14, messaging 8); lint, format, build, contracts sạch; 5 truy vấn/lượt 1 đơn
-- Walkthrough rental, `CLAUDE.md §2.5`; code-review 5 chiều (không CRITICAL/MAJOR); commit cục bộ
-- Máy A: `test:infra` 46/46; kiểm chứng compose E4 (`EXPIRED` ~65 giây, tin `AVAILABLE`), E5 (`late_payments` + yêu cầu hoàn)
+- T3.4b merge (PR #30), tick (`6645851`)
+- Kế hoạch T3.5, A duyệt B1–B10; `RE.DEPOSIT_LIFECYCLE` v1.2 + CHANGELOG
+- Migration `audit_log` + 2 index; entity; 3 biến môi trường
+- `deposit-state`, `DepositQueryService`, `DepositLifecycleService`, 3 controller, `createRefund`; handler 3 sự kiện; `AutoReleaseJob`, `DeadlineJob`, job (c)
+- rental unit 648, e2e 97, infra 61 (môi trường Claude); lint, format, build, contracts sạch; số truy vấn trong ngưỡng
+- Walkthrough rental, `CLAUDE.md §2.5`; code-review 5 chiều; commit cục bộ (không dòng ghi công)
 
 ## Còn lại
-- Push, PR → A merge; sau merge tick `implementation/progress.md` T3.4b
+- Máy A: `pnpm --filter @realestate/rental test:infra` (đủ, gồm storage); `migration:run` rental; kiểm chứng E6
+- Push, PR → A merge; sau merge tick `implementation/progress.md` T3.5
 
 ## Blockers
 _không có_
