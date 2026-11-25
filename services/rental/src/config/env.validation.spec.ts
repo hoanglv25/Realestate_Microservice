@@ -116,6 +116,7 @@ describe('validateEnv', () => {
       AUTO_RELEASE_SECONDS: 259200,
       SAGA_RECONCILE_INTERVAL_MS: 15000,
       SAGA_STUCK_AFTER_SECONDS: 30,
+      HOLD_EXPIRY_INTERVAL_MS: 5000,
     });
     expect(validateEnv({ SERVICE_NAME: 'rental', HOLD_TTL_SECONDS: '60' }).HOLD_TTL_SECONDS).toBe(
       60,
@@ -141,6 +142,19 @@ describe('validateEnv', () => {
     );
     expect(() => validateEnv({ SERVICE_NAME: 'x', SAGA_STUCK_AFTER_SECONDS: '0' })).toThrow(
       /SAGA_STUCK_AFTER_SECONDS/,
+    );
+  });
+
+  it('rental T3.4b: HOLD_EXPIRY_INTERVAL_MS mặc định 5000, 0 tắt job (test); âm hoặc không phải số bị từ chối', () => {
+    expect(validateEnv({ SERVICE_NAME: 'rental' }).HOLD_EXPIRY_INTERVAL_MS).toBe(5000);
+    expect(
+      validateEnv({ SERVICE_NAME: 'rental', HOLD_EXPIRY_INTERVAL_MS: '0' }).HOLD_EXPIRY_INTERVAL_MS,
+    ).toBe(0);
+    expect(() => validateEnv({ SERVICE_NAME: 'x', HOLD_EXPIRY_INTERVAL_MS: '-1' })).toThrow(
+      /HOLD_EXPIRY_INTERVAL_MS/,
+    );
+    expect(() => validateEnv({ SERVICE_NAME: 'x', HOLD_EXPIRY_INTERVAL_MS: 'abc' })).toThrow(
+      /HOLD_EXPIRY_INTERVAL_MS/,
     );
   });
 });

@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import type { DomainEvent } from '../src/messaging/domain-event';
+import { EventHandlerRegistry } from '../src/messaging/event-handler.registry';
+import { HoldExpiryJob } from '../src/rental/jobs/hold-expiry.job';
 import { SagaReconcileJob } from '../src/rental/jobs/saga-reconcile.job';
 import { expectEventMatchesContract } from './helpers/contracts';
 import type { TestApp } from './helpers/create-test-app';
@@ -17,6 +19,8 @@ import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
  *
  * DoD: test 5, 7, 8, 17 của `RE.DEPOSIT_SAGA/Component_Class_Design.md §8` (3, 4, 6 đã có ở rental.infra-spec),
  * C20 (`409 LISTING_INVALID_STATUS` → kết cục cuối), `PAID` → tin `DEPOSITED`, số truy vấn nhánh bù trừ 7.
+ * T3.4b: `HoldExpiryJob` test 11, 12, 13, 16 (đơn `EXPIRED` do chính job tạo), thứ tự "hủy link trước, nhả chỗ sau",
+ * số truy vấn. `HoldExpiryJob` cũng tắt lịch, test gọi `runOnce()`.
  */
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -62,6 +66,10 @@ describe('T3.3 bù trừ, đối soát, đồng bộ listing (hạ tầng thật
   let createMode: 'ok' | '409' | '504' = 'ok';
   /** `GET /internal/payment-orders/:depositId`: order theo đơn; không có → 404. */
   const orders = new Map<string, { orderId: string; checkoutUrl: string }>();
+  /** Hành vi `POST /internal/payment-orders/:depositId/cancel` (T3.4b). */
+  let cancelMode: 'ok' | '404' | '409' | '503' = 'ok';
+  /** Thứ tự lời gọi sang payment (`cancel:<depositId>`) và listing (`status:<depositId>:<status>`), BR-09. */
+  const sequence: string[] = [];
 
   async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
     let raw = '';
@@ -118,6 +126,7 @@ describe('T3.3 bù trừ, đối soát, đồng bộ listing (hạ tầng thật
           depositId: String(body.depositId),
           status: String(body.status),
         });
+        sequence.push(`status:${String(body.depositId)}:${String(body.status)}`);
         if (statusMode === '503') return fail(res, 503, 'DEPENDENCY_UNAVAILABLE');
         if (statusMode === '409') {
           return fail(res, 409, 'LISTING_INVALID_STATUS', {
@@ -152,6 +161,18 @@ describe('T3.3 bù trừ, đối soát, đồng bộ listing (hạ tầng thật
           res,
           201,
           envelope({ ...o, payosOrderCode: 100001, qrCode: '000201', expiresAt: body.expiresAt }),
+        );
+      }
+      const c = /^\/internal\/payment-orders\/([^/]+)\/cancel$/.exec(path);
+      if (c && req.method === 'POST') {
+        sequence.push(`cancel:${c[1]}`);
+        if (cancelMode === '404') return fail(res, 404, 'PAYMENT_ORDER_NOT_FOUND');
+        if (cancelMode === '409') return fail(res, 409, 'PAYMENT_ORDER_ALREADY_PAID');
+        if (cancelMode === '503') return fail(res, 503, 'PAYMENT_PROVIDER_UNAVAILABLE');
+        return send(
+          res,
+          200,
+          envelope({ orderId: orders.get(c[1])?.orderId, depositId: c[1], status: 'CANCELLED' }),
         );
       }
       const m = /^\/internal\/payment-orders\/([^/]+)$/.exec(path);
@@ -293,7 +314,9 @@ describe('T3.3 bù trừ, đối soát, đồng bộ listing (hạ tầng thật
   beforeEach(() => {
     statusMode = 'ok';
     createMode = 'ok';
+    cancelMode = 'ok';
     statusCalls.length = 0;
+    sequence.length = 0;
   });
 
   describe('test 5: tạo order thất bại chắc chắn -> bù trừ ngay', () => {
@@ -454,6 +477,162 @@ describe('T3.3 bù trừ, đối soát, đồng bộ listing (hạ tầng thật
       statusCalls.length = 0;
       await job.runOnce();
       expect(statusCalls.filter((c) => c.depositId === id)).toHaveLength(0);
+    });
+  });
+
+  describe('HoldExpiryJob (T3.4b, BR-09)', () => {
+    let expiry: HoldExpiryJob;
+    beforeAll(() => {
+      expiry = t.app.get(HoldExpiryJob);
+    });
+
+    /** Đơn PENDING_PAYMENT có order (saga thành công), lùi expires_at về quá khứ để job coi là hết hạn. */
+    async function dueDeposit(): Promise<{ id: string; listingId: string }> {
+      const listingId = randomUUID();
+      const res = await startDeposit(listingId);
+      expect(res.status).toBe(201);
+      const id = res.body.data.depositId as string;
+      await pg.query(`UPDATE deposits SET expires_at = now() - interval '1 second' WHERE id = $1`, [
+        id,
+      ]);
+      sequence.length = 0;
+      statusCalls.length = 0;
+      return { id, listingId };
+    }
+    /** Chạy handler `payment.deposited` thật trong transaction (đường RabbitMQ đã kiểm ở rental.infra-spec test 14). */
+    async function deliverDeposited(depositId: string): Promise<void> {
+      const d = await deposit(depositId);
+      const paidAt = new Date().toISOString();
+      const event: DomainEvent<Record<string, unknown>> = {
+        eventId: randomUUID(),
+        eventType: 'payment.deposited',
+        version: 1,
+        occurredAt: paidAt,
+        correlationId: randomUUID(),
+        producer: 'payment',
+        payload: {
+          depositId,
+          orderId: d.payment_order_id ?? randomUUID(),
+          tenantId: d.tenant_id,
+          ownerId: d.owner_id,
+          amountVnd: 2_000,
+          payosReference: `FT${Date.now()}`,
+          paidAt,
+        },
+      };
+      expectEventMatchesContract(event);
+      const handler = t.app.get(EventHandlerRegistry).get('payment.deposited');
+      expect(handler).toBeDefined();
+      await ds.transaction((m) => handler!(event, m));
+    }
+
+    it('test 11 (E4): hủy order 200 -> HỦY LINK TRƯỚC rồi mới nhả chỗ; EXPIRED, saga_log CANCEL_PAYMENT_ORDER OK, deposit-expired khớp hợp đồng, tin AVAILABLE; 5 truy vấn (1 SELECT + 4)', async () => {
+      const d = await dueDeposit();
+
+      let r: Awaited<ReturnType<HoldExpiryJob['runOnce']>> | undefined;
+      const n = await countQueries(async () => (r = await expiry.runOnce()));
+
+      expect(r).toMatchObject({ expired: 1, paid: 0, retry: 0, skipped: 0, failed: 0 });
+      expect(n).toBe(5);
+      expect(sequence).toEqual([`cancel:${d.id}`, `status:${d.id}:AVAILABLE`]);
+      const row = await deposit(d.id);
+      expect(row).toMatchObject({ status: 'EXPIRED', listing_target_status: 'AVAILABLE' });
+      expect(row.listing_synced_at).not.toBeNull();
+      expect(listingStatus.get(d.listingId)).toBe('AVAILABLE');
+      expect((await sagaLog(d.id)).at(-1)).toMatchObject({
+        step: 'CANCEL_PAYMENT_ORDER',
+        outcome: 'OK',
+        detail: { status: 200 },
+      });
+      const [ev] = await outbox('rental.deposit-expired', d.id);
+      expectEventMatchesContract(ev);
+      expect(ev.payload).toEqual({
+        depositId: d.id,
+        listingId: d.listingId,
+        tenantId: tenant.id,
+        ownerId,
+      });
+
+      // Lượt sau không đụng lại
+      sequence.length = 0;
+      await expiry.runOnce();
+      expect(sequence).toEqual([]);
+    });
+
+    it('hủy order 404 (payment chưa có order) -> vẫn EXPIRED, saga_log ghi status 404', async () => {
+      const d = await dueDeposit();
+      cancelMode = '404';
+
+      await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 1 });
+      expect((await deposit(d.id)).status).toBe('EXPIRED');
+      expect((await sagaLog(d.id)).at(-1)).toMatchObject({
+        step: 'CANCEL_PAYMENT_ORDER',
+        detail: { status: 404 },
+      });
+      expect(listingStatus.get(d.listingId)).toBe('AVAILABLE');
+    });
+
+    it('test 12: hủy order 409 PAYMENT_ORDER_ALREADY_PAID -> không EXPIRED, tin vẫn HELD; payment.deposited đến sau -> PAID', async () => {
+      const d = await dueDeposit();
+      cancelMode = '409';
+
+      await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 0, paid: 1 });
+      expect((await deposit(d.id)).status).toBe('PENDING_PAYMENT');
+      expect(statusCalls).toEqual([]);
+      expect(listingStatus.get(d.listingId)).toBe('HELD');
+      expect(await outbox('rental.deposit-expired', d.id)).toHaveLength(0);
+
+      await deliverDeposited(d.id);
+      expect(await deposit(d.id)).toMatchObject({
+        status: 'PAID',
+        listing_target_status: 'DEPOSITED',
+      });
+      sequence.length = 0;
+      await expiry.runOnce(); // đơn PAID không còn bị chọn
+      expect(sequence).toEqual([]);
+    });
+
+    it('test 13: payOS lỗi (503) rồi payment DỪNG -> giữ PENDING_PAYMENT, tin vẫn HELD; payment hồi -> lượt sau EXPIRED', async () => {
+      const d = await dueDeposit();
+      cancelMode = '503';
+      await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 0, retry: 1 });
+      expect((await deposit(d.id)).status).toBe('PENDING_PAYMENT');
+
+      await stopPayment();
+      try {
+        await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 0, retry: 1 });
+      } finally {
+        await startPayment();
+      }
+      expect((await deposit(d.id)).status).toBe('PENDING_PAYMENT');
+      expect(statusCalls).toEqual([]);
+      expect(listingStatus.get(d.listingId)).toBe('HELD');
+      expect((await sagaLog(d.id)).filter((l) => l.step === 'CANCEL_PAYMENT_ORDER')).toHaveLength(
+        0,
+      );
+
+      cancelMode = 'ok';
+      await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 1 });
+      expect((await deposit(d.id)).status).toBe('EXPIRED');
+      expect(listingStatus.get(d.listingId)).toBe('AVAILABLE');
+    });
+
+    it('test 16: đơn đã EXPIRED (do job) nhận payment.deposited -> không đổi (tiền đến muộn do payment xử lý, BR-10)', async () => {
+      const d = await dueDeposit();
+      await expiry.runOnce();
+      expect((await deposit(d.id)).status).toBe('EXPIRED');
+
+      await deliverDeposited(d.id);
+      expect(await deposit(d.id)).toMatchObject({ status: 'EXPIRED', paid_at: null });
+    });
+
+    it('đơn chưa hết hạn -> job không đụng tới', async () => {
+      const listingId = randomUUID();
+      const res = await startDeposit(listingId);
+      sequence.length = 0;
+      await expect(expiry.runOnce()).resolves.toMatchObject({ expired: 0, retry: 0, paid: 0 });
+      expect(sequence).toEqual([]);
+      expect((await deposit(res.body.data.depositId)).status).toBe('PENDING_PAYMENT');
     });
   });
 });
