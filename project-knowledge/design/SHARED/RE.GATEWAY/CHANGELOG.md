@@ -2,6 +2,32 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v1.4] — 2026-11-26
+
+- **type:** MINOR
+- **author:** Claude (đề xuất), chờ A duyệt (`implementation/van-de-can-quyet-dinh.md` C25)
+- **summary:** Thêm định tuyến `public` cho danh mục địa giới của listing (`RE.LOCATION`).
+
+### Thay đổi
+
+**1.**
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `API_Spec.md` §3 (dòng 6a) | Thêm |
+
+- **Cũ:** không có dòng cho `/api/v1/cities`, `/api/v1/districts`; gateway trả `404 GATEWAY_ROUTE_NOT_FOUND`.
+- **Mới:** `GET /api/v1/cities`, `GET /api/v1/districts` → listing, mức `public`. Đặt `6a` để không đổi số các dòng đang được trỏ tới.
+- **Lý do:** form tạo tin và bộ lọc tìm kiếm cần danh mục, kể cả khi chưa đăng nhập.
+
+### File design đã sửa
+
+- Header 3 file: v1.3 → v1.4.
+
+### Ảnh hưởng
+
+- Code: thêm hai dòng vào `services/api-gateway/src/gateway/routes.ts` và test `route-resolver.spec.ts` (task T2.6).
+
 ## [v1.3] — 2026-11-16
 
 - **type:** MINOR

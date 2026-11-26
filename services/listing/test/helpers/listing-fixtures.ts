@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Client } from 'pg';
 
-/** Tin dựng bằng SQL trực tiếp cho test hạ tầng (đặt được `status`, `approval_status`, `held_*` mà API không cho). */
+/**
+ * Tin dựng bằng SQL trực tiếp cho test hạ tầng (đặt được `status`, `approval_status`, `held_*` mà API không cho).
+ * `district`, `city` là TÊN trong danh mục `RE.LOCATION`; `insertListing` tra ra `city_id`, `district_id`
+ * (v1.5). Tên không có trong danh mục → INSERT lỗi `NOT NULL` (fixture sai, không lặng lẽ bỏ qua).
+ */
 export interface FixtureListing {
   ownerId?: string;
   title?: string;
@@ -51,9 +55,13 @@ export async function insertListing(pg: Client, over: FixtureListing = {}): Prom
   const res = await pg.query<{ id: string }>(
     `INSERT INTO listings
        (owner_id, title, description, property_type, price_vnd, deposit_amount_vnd, area_m2,
-        address, district, city, amenities, location, status, approval_status,
+        address, city_id, district_id, amenities, location, status, approval_status,
         held_until, held_by_deposit_id, deleted_at, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[],
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+             (SELECT id FROM cities WHERE name = $10),
+             (SELECT d.id FROM districts d JOIN cities c ON c.id = d.city_id
+               WHERE c.name = $10 AND d.name = $9),
+             $11::text[],
              ST_SetSRID(ST_MakePoint($13, $12), 4326)::geography, $14, $15,
              $16::timestamptz, $17::uuid, $18::timestamptz, $19::timestamptz, $19::timestamptz)
      RETURNING id`,

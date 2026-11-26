@@ -37,13 +37,15 @@ describe('ROUTES — bảng định tuyến (dữ liệu)', () => {
     ]);
   });
 
-  it('chỉ GET /listings và GET /listings/:id (và auth, webhook) là không cần token', () => {
+  it('chỉ GET /listings, GET /listings/:id, GET /cities, GET /districts (và auth, webhook) là không cần token', () => {
     const open = ROUTES.filter((r) => r.access === 'public' || r.access === 'payos').map(
       (r) => `${(r.methods ?? ['*']).join(',')} ${r.pattern}`,
     );
     expect(open.sort()).toEqual(
       [
         '* /api/v1/auth/*',
+        'GET /api/v1/cities', // v1.4, RE.LOCATION
+        'GET /api/v1/districts', // v1.4, RE.LOCATION
         'GET /api/v1/listings',
         'GET /api/v1/listings/:id',
         'POST /api/v1/payments/payos/webhook',

@@ -36,7 +36,12 @@ describe('buildSearchSql (RE.LISTING/API_Spec.md §1.3)', () => {
 
     it('count và data dùng CÙNG mệnh đề WHERE (total khớp tập trả về)', () => {
       const built = buildSearchSql(
-        query({ minPrice: '1', maxArea: '50', district: 'Cầu Giấy', amenities: 'WIFI' }),
+        query({
+          minPrice: '1',
+          maxArea: '50',
+          districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
+          amenities: 'WIFI',
+        }),
       );
       // WHERE ngoài cùng là WHERE cuối (truy vấn con LATERAL của ảnh bìa nằm trước nó)
       const where = (sql: string) =>
@@ -75,13 +80,20 @@ describe('buildSearchSql (RE.LISTING/API_Spec.md §1.3)', () => {
       expect(built.countParams).toEqual([0]);
     });
 
-    it('district so khớp đúng chuỗi; giá trị chỉ nằm ở tham số, không nối vào SQL', () => {
-      const evil = `x'; DROP TABLE listings; --`;
-      const built = buildSearchSql(query({ district: evil }));
-      expect(built.countSql).toContain('l.district = $1');
-      expect(built.countSql).not.toContain('DROP');
-      expect(built.dataSql).not.toContain('DROP');
-      expect(built.countParams).toEqual([evil]);
+    it('v1.5: cityId, districtId so khớp cột id, giá trị chỉ nằm ở tham số', () => {
+      const built = buildSearchSql(
+        query({
+          cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+          districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
+        }),
+      );
+      expect(built.countSql).toContain('l.city_id = $1');
+      expect(built.countSql).toContain('l.district_id = $2');
+      expect(built.countSql).not.toContain('0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11');
+      expect(built.countParams).toEqual([
+        '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+        '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
+      ]);
     });
 
     it('amenities: mọi tiện ích phải có (@>)', () => {
@@ -195,7 +207,8 @@ describe('buildSearchSql (RE.LISTING/API_Spec.md §1.3)', () => {
           maxPrice: '9',
           minArea: '2',
           maxArea: '8',
-          district: 'Đống Đa',
+          cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+          districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
           amenities: 'WIFI,FRIDGE',
           available: 'true',
           lat: '21',
@@ -217,5 +230,16 @@ describe('buildSearchSql (RE.LISTING/API_Spec.md §1.3)', () => {
     expect(dataSql).not.toContain('l.description');
     expect(dataSql).not.toContain('reject_reason');
     expect(dataSql).not.toMatch(/AS "approvalStatus"/);
+  });
+
+  it('v1.5: có cityId, districtId và tên tỉnh, quận bằng truy vấn con theo PK (không cột chuỗi cũ)', () => {
+    const { dataSql } = buildSearchSql(query());
+    expect(dataSql).toContain('l.city_id AS "cityId"');
+    expect(dataSql).toContain('l.district_id AS "districtId"');
+    expect(dataSql).toContain('(SELECT c.name FROM cities c WHERE c.id = l.city_id) AS city');
+    expect(dataSql).toContain(
+      '(SELECT d.name FROM districts d WHERE d.id = l.district_id) AS district',
+    );
+    expect(dataSql).not.toMatch(/l\.district,|l\.city,/);
   });
 });

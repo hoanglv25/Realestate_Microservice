@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Request thường, token sai, `/internal`, webhook, service đích lỗi |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0003 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.4 (đề xuất, chờ A duyệt: C25) |
 
 ## 1. Request thường
 

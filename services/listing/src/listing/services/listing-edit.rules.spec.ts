@@ -9,8 +9,8 @@ const current = {
   depositAmountVnd: 3000000,
   areaM2: 25,
   address: '1 Đại Cồ Việt',
-  district: 'Hai Bà Trưng',
-  city: 'Hà Nội',
+  cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+  districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
   amenities: ['WIFI', 'FRIDGE'],
   lat: 21.0054,
   lng: 105.8431,
@@ -30,8 +30,8 @@ describe('classifyEdit', () => {
     ['description', { description: 'Mô tả khác' }],
     ['propertyType', { propertyType: 'HOUSE' }],
     ['address', { address: '2 Tạ Quang Bửu' }],
-    ['district', { district: 'Cầu Giấy' }],
-    ['city', { city: 'Hồ Chí Minh' }],
+    ['districtId', { districtId: '9a0e8c11-2d3b-4c5e-8f60-71a2b3c4d5e6' }],
+    ['cityId', { cityId: '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f' }],
     ['lat', { lat: 21.01, lng: 105.8431 }],
     ['lng', { lat: 21.0054, lng: 105.9 }],
   ])('đổi %s là đổi nội dung hiển thị', (field, patch) => {
@@ -63,6 +63,12 @@ describe('classifyEdit', () => {
     expect(classifyEdit({ ...current, description: null }, { description: '' }).changed).toEqual(
       [],
     );
+  });
+
+  it('gửi lại đúng cityId, districtId cũ: không đổi (so khớp chuỗi id)', () => {
+    expect(
+      classifyEdit(current, { cityId: current.cityId, districtId: current.districtId }),
+    ).toEqual({ changed: [], display: false });
   });
 
   it('nhiều trường: liệt kê đủ, display true nếu có một trường hiển thị', () => {

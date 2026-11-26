@@ -1,6 +1,6 @@
 import { SearchListingsQuery } from '../dto/search-listings.query';
 import { ListingStatus, PropertyType } from '../entities/listing.enums';
-import { pointSql } from './listing.sql';
+import { locationColumns, pointSql } from './listing.sql';
 
 /** Một dòng kết quả tìm kiếm (trước khi đổi thành `ListingSummaryDto`). */
 export interface SearchRow {
@@ -12,8 +12,10 @@ export interface SearchRow {
   depositAmountVnd: number;
   areaM2: number;
   address: string | null;
-  district: string | null;
-  city: string | null;
+  cityId: string;
+  city: string;
+  districtId: string;
+  district: string;
   amenities: string[];
   lat: number;
   lng: number;
@@ -44,7 +46,7 @@ const BASE_CONDITIONS = [
 const COVER_JOIN = `LEFT JOIN LATERAL (SELECT i.object_key FROM listing_images i WHERE i.listing_id = l.id ORDER BY i.sort_order, i.created_at, i.id LIMIT 1) cover ON true`;
 
 /** Cột của `ListingSummaryDto`: không có `description`, `approval_status`, `reject_reason`, `updated_at`. */
-const SUMMARY_COLUMNS = `l.id, l.owner_id AS "ownerId", l.title, l.property_type AS "propertyType", l.price_vnd::float8 AS "priceVnd", l.deposit_amount_vnd::float8 AS "depositAmountVnd", l.area_m2::float8 AS "areaM2", l.address, l.district, l.city, l.amenities, ST_Y(l.location::geometry) AS lat, ST_X(l.location::geometry) AS lng, l.status, l.created_at AS "createdAt", cover.object_key AS "coverKey"`;
+const SUMMARY_COLUMNS = `l.id, l.owner_id AS "ownerId", l.title, l.property_type AS "propertyType", l.price_vnd::float8 AS "priceVnd", l.deposit_amount_vnd::float8 AS "depositAmountVnd", l.area_m2::float8 AS "areaM2", l.address, ${locationColumns('l')}, l.amenities, ST_Y(l.location::geometry) AS lat, ST_X(l.location::geometry) AS lng, l.status, l.created_at AS "createdAt", cover.object_key AS "coverKey"`;
 
 /**
  * Dựng hai câu SQL tìm kiếm (route 11, `RE.LISTING/API_Spec.md §1.3`) từ query đã kiểm.
@@ -65,7 +67,8 @@ export function buildSearchSql(q: SearchListingsQuery): BuiltSearch {
   if (q.maxPrice !== undefined) where.push(`l.price_vnd <= ${add(q.maxPrice)}`);
   if (q.minArea !== undefined) where.push(`l.area_m2 >= ${add(q.minArea)}`);
   if (q.maxArea !== undefined) where.push(`l.area_m2 <= ${add(q.maxArea)}`);
-  if (q.district !== undefined) where.push(`l.district = ${add(q.district)}`);
+  if (q.cityId !== undefined) where.push(`l.city_id = ${add(q.cityId)}`);
+  if (q.districtId !== undefined) where.push(`l.district_id = ${add(q.districtId)}`);
   if (q.amenities !== undefined && q.amenities.length > 0) {
     where.push(`l.amenities @> ${add(q.amenities)}::text[]`);
   }

@@ -8,8 +8,7 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
-  IsString,
-  Length,
+  IsUUID,
   Max,
   Min,
   Validate,
@@ -20,7 +19,6 @@ import {
 } from 'class-validator';
 import { PageQueryDto } from '../../common/response/page-query.dto';
 import { AMENITIES, Amenity } from '../entities/listing.enums';
-import { trim } from './trim';
 
 /** Cách sắp xếp của route 11 (`RE.LISTING/API_Spec.md §1.3`). `distance` cần `lat` và `lng`. */
 export const SEARCH_SORTS = ['newest', 'price_asc', 'price_desc', 'distance'] as const;
@@ -122,15 +120,21 @@ export class SearchListingsQuery extends PageQueryDto {
   maxArea?: number;
 
   @ApiPropertyOptional({
-    maxLength: 100,
-    example: 'Hai Bà Trưng',
-    description: 'Quận; so khớp đúng chuỗi (phân biệt hoa thường)',
+    format: 'uuid',
+    description: 'Tỉnh/thành (id từ GET /cities, v1.5). Id không có → kết quả rỗng',
   })
   @IsOptional()
-  @Transform(trim)
-  @IsString()
-  @Length(1, 100)
-  district?: string;
+  @IsUUID(undefined, { message: 'cityId phải là UUID' })
+  cityId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Quận/huyện (id từ GET /districts, v1.5 thay district dạng chuỗi). Id không có → kết quả rỗng',
+  })
+  @IsOptional()
+  @IsUUID(undefined, { message: 'districtId phải là UUID' })
+  districtId?: string;
 
   @ApiPropertyOptional({
     type: 'string',

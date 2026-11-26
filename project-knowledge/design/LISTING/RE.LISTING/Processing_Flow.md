@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Quản lý sản phẩm, tải ảnh, tìm kiếm, giữ chỗ và đổi trạng thái theo đơn |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0010 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v1.4 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.5 (đề xuất, chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
 
 ## 1. Vòng đời trạng thái BĐS
 
@@ -72,12 +72,12 @@ Một câu `UPDATE listings SET deleted_at = now() WHERE id AND owner_id AND sta
 
 | Endpoint | Truy vấn |
 |---|---|
-| Tìm kiếm | 2 (count + data; ảnh bìa qua `LEFT JOIN LATERAL` trong cùng câu data) |
+| Tìm kiếm | 2 (count + data; ảnh bìa qua `LEFT JOIN LATERAL`, tên tỉnh/quận qua `JOIN` trong cùng câu data, v1.5) |
 | Bản chụp nội bộ | 1 |
 | Chi tiết | 2 (tin + ảnh) |
 | Của tôi | 3 (count + data + ảnh của trang) |
-| Thêm, ẩn, hiện | 1–3 (ghi có điều kiện, 0 dòng thì đọc lại để chọn lỗi, đọc ảnh cho response) |
-| Sửa | 3 (đọc tin, `UPDATE ... RETURNING`, ảnh) |
+| Thêm, ẩn, hiện | 1–3 (ghi có điều kiện, 0 dòng thì đọc lại để chọn lỗi, đọc ảnh cho response); thêm tin cộng 1 kiểm cặp `cityId`/`districtId` (v1.5) → tối đa 4 |
+| Sửa | 3 (đọc tin, `UPDATE ... RETURNING`, ảnh); cộng 1 kiểm cặp khi body có `cityId`/`districtId` (v1.5) → tối đa 4 |
 | Xóa mềm | 1, cộng 1 khi 0 dòng |
 | Xác nhận ảnh | 5 (đọc tin, khóa tin + đếm + thêm ảnh + đổi duyệt trong một transaction; `HeadObject` ngoài transaction) |
 | Duyệt, từ chối | 3 (`UPDATE ... RETURNING`, đọc lại khi 0 dòng, ảnh) |

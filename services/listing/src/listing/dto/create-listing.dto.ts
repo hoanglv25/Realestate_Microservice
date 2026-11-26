@@ -10,6 +10,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Max,
   MaxLength,
@@ -71,19 +72,20 @@ export class CreateListingDto {
   @MaxLength(300)
   address!: string;
 
-  @ApiProperty({ maxLength: 100, example: 'Hai Bà Trưng' })
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  district!: string;
+  @ApiProperty({
+    format: 'uuid',
+    description: 'Id tỉnh/thành lấy từ GET /cities (RE.LOCATION; v1.5 thay city dạng chuỗi)',
+  })
+  @IsUUID(undefined, { message: 'cityId phải là UUID' })
+  cityId!: string;
 
-  @ApiProperty({ maxLength: 100, example: 'Hà Nội' })
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  city!: string;
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'Id quận/huyện lấy từ GET /districts?cityId=…; phải thuộc cityId (v1.5 thay district dạng chuỗi)',
+  })
+  @IsUUID(undefined, { message: 'districtId phải là UUID' })
+  districtId!: string;
 
   @ApiPropertyOptional({ enum: AMENITIES, isArray: true, default: [] })
   @IsOptional()

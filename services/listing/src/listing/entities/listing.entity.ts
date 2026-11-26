@@ -59,11 +59,13 @@ export class Listing {
   @Column({ type: 'varchar', length: 300, nullable: true })
   address!: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  district!: string | null;
+  /** Danh mục `RE.LOCATION` (v1.5, thay cột chuỗi `city`): FK cùng service. Tên đọc qua `locationColumns`. */
+  @Column({ name: 'city_id', type: 'uuid' })
+  cityId!: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  city!: string | null;
+  /** Danh mục `RE.LOCATION` (v1.5, thay cột chuỗi `district`); phải thuộc `cityId` (kiểm ở service). */
+  @Column({ name: 'district_id', type: 'uuid' })
+  districtId!: string;
 
   /** WGS84. Không `select` mặc định: đọc `lat`/`lng` bằng `ST_Y/ST_X` (xem `listing.sql.ts`). */
   @Column({ type: 'geography', spatialFeatureType: 'Point', srid: 4326, select: false })

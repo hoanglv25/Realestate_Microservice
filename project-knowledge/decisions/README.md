@@ -42,3 +42,4 @@ Bộ này đánh số từ 0001. Hai ADR cũ ở `docs/adr/` được chuyển v
 | [0012](0012-contract-first-cho-api-noi-bo-va-su-kien.md) | Contract-first cho API nội bộ và sự kiện | Accepted |
 | [0013](0013-typeorm-migration.md) | Migration TypeORM, tắt `synchronize` | Accepted |
 | [0014](0014-template-nestjs-dung-chung.md) | Template NestJS dùng chung, payment bằng NestJS | Accepted |
+| [0015](0015-danh-muc-dia-gioi-truoc-2025-tham-chieu-bang-id.md) | Danh mục tỉnh → quận/huyện trước 1/7/2025, tin đăng tham chiếu bằng id | Proposed |

@@ -5,8 +5,8 @@ import { Amenity, ApprovalStatus, PropertyType } from '../entities/listing.enums
  * service đọc dòng hiện tại (khóa `FOR UPDATE`), gọi `classifyEdit` rồi `resubmits`.
  *
  * | Trạng thái duyệt | Sửa gì                                              | Kết quả          |
- * | APPROVED         | title, description, propertyType, address, district,| PENDING_REVIEW   |
- * |                  | city, lat/lng, hoặc thêm ảnh                        |                  |
+ * | APPROVED         | title, description, propertyType, address, cityId,  | PENDING_REVIEW   |
+ * |                  | districtId, lat/lng, hoặc thêm ảnh (v1.5)           |                  |
  * | APPROVED         | priceVnd, depositAmountVnd, areaM2, amenities       | giữ APPROVED     |
  * | REJECTED         | bất kỳ trường nào, hoặc thêm ảnh                    | PENDING_REVIEW   |
  * | PENDING_REVIEW   | bất kỳ                                              | giữ              |
@@ -21,8 +21,8 @@ export interface EditableFields {
   depositAmountVnd: number;
   areaM2: number;
   address: string | null;
-  district: string | null;
-  city: string | null;
+  cityId: string;
+  districtId: string;
   amenities: readonly (Amenity | string)[];
   lat: number;
   lng: number;
@@ -34,8 +34,8 @@ const DISPLAY_FIELDS: ReadonlySet<string> = new Set([
   'description',
   'propertyType',
   'address',
-  'district',
-  'city',
+  'cityId',
+  'districtId',
   'lat',
   'lng',
   'images',
@@ -69,7 +69,7 @@ export function classifyEdit(
     const differs =
       key === 'amenities'
         ? !sameAmenities(before as readonly string[], value as readonly string[])
-        : key === 'description' || key === 'address' || key === 'district' || key === 'city'
+        : key === 'description' || key === 'address'
           ? text(before as string | null) !== text(value as string | null)
           : before !== value;
     if (differs) changed.push(key);

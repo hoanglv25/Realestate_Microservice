@@ -14,8 +14,10 @@ export interface ListingRow {
   depositAmountVnd: number;
   areaM2: number;
   address: string | null;
-  district: string | null;
-  city: string | null;
+  cityId: string;
+  city: string;
+  districtId: string;
+  district: string;
   amenities: string[];
   lat: number;
   lng: number;
@@ -25,6 +27,17 @@ export interface ListingRow {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * Cột địa giới của tin (`RE.LISTING` v1.5): id và tên tỉnh, quận. Tên lấy bằng truy vấn con theo PK của
+ * `cities`, `districts` nên dùng được cả trong `SELECT` lẫn `INSERT/UPDATE ... RETURNING` và không thêm
+ * lượt truy vấn. Cột `NOT NULL` + FK nên tên luôn có.
+ */
+export const locationColumns = (alias: string): string =>
+  `${alias}.city_id AS "cityId", ` +
+  `(SELECT c.name FROM cities c WHERE c.id = ${alias}.city_id) AS city, ` +
+  `${alias}.district_id AS "districtId", ` +
+  `(SELECT d.name FROM districts d WHERE d.id = ${alias}.district_id) AS district`;
 
 /**
  * Danh sách cột của `ListingRow`, dùng cho `SELECT` và `RETURNING` (`alias` là bí danh bảng `listings`).
@@ -41,8 +54,7 @@ export const listingColumns = (alias: string): string => `
   ${alias}.deposit_amount_vnd::float8 AS "depositAmountVnd",
   ${alias}.area_m2::float8 AS "areaM2",
   ${alias}.address,
-  ${alias}.district,
-  ${alias}.city,
+  ${locationColumns(alias)},
   ${alias}.amenities,
   ST_Y(${alias}.location::geometry) AS lat,
   ST_X(${alias}.location::geometry) AS lng,

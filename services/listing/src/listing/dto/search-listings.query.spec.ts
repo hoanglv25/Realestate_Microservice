@@ -25,7 +25,8 @@ describe('SearchListingsQuery (RE.LISTING/API_Spec.md §1.3)', () => {
       maxPrice: '5000000',
       minArea: '15.5',
       maxArea: '40',
-      district: '  Hai Bà Trưng ',
+      cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+      districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
       amenities: 'WIFI, PARKING',
       available: 'true',
       lat: '21.0054',
@@ -41,7 +42,8 @@ describe('SearchListingsQuery (RE.LISTING/API_Spec.md §1.3)', () => {
       maxPrice: 5000000,
       minArea: 15.5,
       maxArea: 40,
-      district: 'Hai Bà Trưng',
+      cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+      districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
       amenities: ['WIFI', 'PARKING'],
       available: true,
       lat: 21.0054,
@@ -171,9 +173,13 @@ describe('SearchListingsQuery (RE.LISTING/API_Spec.md §1.3)', () => {
     expect((await parse({ amenities: Array(11).fill('WIFI').join(',') })).fields).toEqual([]);
   });
 
-  it('district rỗng hoặc dài hơn 100 ký tự → 400', async () => {
-    expect((await parse({ district: '   ' })).fields).toEqual(['district']);
-    expect((await parse({ district: 'x'.repeat(101) })).fields).toEqual(['district']);
+  it('v1.5: cityId, districtId không phải UUID → 400', async () => {
+    expect((await parse({ cityId: 'Hà Nội' })).fields).toEqual(['cityId']);
+    expect((await parse({ districtId: 'Hai Bà Trưng' })).fields).toEqual(['districtId']);
+  });
+
+  it('v1.5: district dạng chuỗi (hợp đồng cũ) → tham số lạ, 400', async () => {
+    expect((await parse({ district: 'Hai Bà Trưng' })).fields).toEqual(['district']);
   });
 
   it.each(['price_asc', 'price_desc', 'newest'])('sort=%s hợp lệ', async (sort) => {

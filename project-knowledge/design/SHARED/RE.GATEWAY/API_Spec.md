@@ -7,7 +7,7 @@
 | **Quy tắc** | NFR03, NFR06; không chứa `BR-xx` |
 | **Quyết định** | ADR-0003 |
 | **CSDL** | Không. Bộ đếm rate limit trong bộ nhớ của gateway (một instance; chốt 2026-11-16) |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.4 (đề xuất, chờ A duyệt: C25) |
 
 ## 1. Việc gateway làm và không làm
 
@@ -47,6 +47,7 @@ Gateway chỉ kiểm thô. Service kiểm lại vai trò và chủ sở hữu.
 | 4 | `GET /api/v1/listings`, `GET /api/v1/listings/:id` | listing | `public` | `RE.LISTING` |
 | 5 | `/api/v1/listings/*` (còn lại) | listing | `landlord` | `RE.LISTING` |
 | 6 | `/api/v1/admin/listings/*` | listing | `admin` | `RE.LISTING` |
+| 6a | `GET /api/v1/cities`, `GET /api/v1/districts` (v1.4) | listing | `public` | `RE.LOCATION` |
 | 7 | `/api/v1/viewings/*` | rental | `user` | `RE.VIEWING` |
 | 8 | `/api/v1/deposits/*` | rental | `user` | `RE.DEPOSIT_SAGA`, `RE.DEPOSIT_LIFECYCLE` |
 | 9 | `/api/v1/admin/deposits/*` | rental | `admin` | `RE.DEPOSIT_LIFECYCLE` |
