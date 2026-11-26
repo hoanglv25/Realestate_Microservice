@@ -46,6 +46,9 @@ export const ROUTES: readonly RouteRule[] = [
   { methods: ['GET'], pattern: '/api/v1/listings/:id', service: 'listing', access: 'public' },
   { pattern: '/api/v1/listings/*', service: 'listing', access: 'landlord' },
   { pattern: '/api/v1/admin/listings/*', service: 'listing', access: 'admin' },
+  // listing — dòng 6a (v1.4): danh mục địa giới `RE.LOCATION`, chỉ GET, công khai
+  { methods: ['GET'], pattern: '/api/v1/cities', service: 'listing', access: 'public' },
+  { methods: ['GET'], pattern: '/api/v1/districts', service: 'listing', access: 'public' },
 
   // rental — dòng 7, 8, 9
   { pattern: '/api/v1/viewings/*', service: 'rental', access: 'user' },

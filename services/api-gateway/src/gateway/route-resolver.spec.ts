@@ -69,6 +69,9 @@ describe('RouteResolver — mọi route công khai trong API_Spec của các ser
     ['POST', '/api/v1/listings/l-1/images', 'listing', 'landlord'],
     ['POST', '/api/v1/admin/listings/l-1/approve', 'listing', 'admin'],
     ['POST', '/api/v1/admin/listings/l-1/reject', 'listing', 'admin'],
+    // listing — danh mục địa giới (dòng 6a, v1.4, RE.LOCATION)
+    ['GET', '/api/v1/cities', 'listing', 'public'],
+    ['GET', '/api/v1/districts', 'listing', 'public'],
     // rental
     ['POST', '/api/v1/viewings', 'rental', 'user'],
     ['GET', '/api/v1/viewings/mine', 'rental', 'user'],
@@ -158,6 +161,21 @@ describe('RouteResolver — quy tắc khớp (RE.GATEWAY/API_Spec.md §3, v1.3)'
     expect(e.getStatus()).toBe(404);
     expect(e.code).toBe('GATEWAY_ROUTE_NOT_FOUND');
     expect(JSON.stringify(e.getResponse())).not.toContain('.test');
+  });
+
+  it('v1.4: danh mục địa giới chỉ GET, có query; method khác và đường dẫn con không khớp', () => {
+    expect(resolver.resolve('GET', '/api/v1/districts?cityId=c-1&pageSize=50')).toMatchObject({
+      service: 'listing',
+      access: 'public',
+    });
+    for (const [method, path] of [
+      ['POST', '/api/v1/cities'],
+      ['DELETE', '/api/v1/districts'],
+      ['GET', '/api/v1/cities/c-1'],
+      ['GET', '/api/v1/cities/c-1/districts'],
+    ]) {
+      expect(notFound(method, path).code).toBe('GATEWAY_ROUTE_NOT_FOUND');
+    }
   });
 
   it('/internal/*, /health và đường dẫn không có tiền tố /api/v1 không nằm trong bảng', () => {
