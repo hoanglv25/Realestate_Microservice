@@ -7,7 +7,7 @@
 | **Quy tắc** | BR-03, BR-05, BR-06, BR-14 |
 | **Quyết định** | ADR-0010 (gộp sản phẩm vào listing), ADR-0007 (S3) |
 | **CSDL** | `listing_db` / `listing_user` (PostGIS, pgcrypto); S3 bucket `listing-images` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v1.4 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.5 (đề xuất, chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
 
 > Báo cáo v2 Bảng 3.8 chỉ liệt kê **thao tác**. Đường dẫn chốt 2026-11-12 (A6); tên trường, giá trị chốt 2026-11-16.
 
@@ -38,7 +38,8 @@
 | `priceVnd` | int | > 0, giá thuê tháng |
 | `depositAmountVnd` | int | > 0, tiền cọc (BR-04) |
 | `areaM2` | number | > 0 |
-| `district`, `city`, `address` | string | Bắt buộc khi tạo (route 1); `address` ≤ 300, `district`, `city` ≤ 100 (chốt 2026-11-20) |
+| `address` | string | Bắt buộc khi tạo (route 1), ≤ 300 (chốt 2026-11-20) |
+| `cityId`, `districtId` | UUID | **v1.5**, thay `city`, `district` dạng chuỗi. Bắt buộc khi tạo (route 1); route 2 gửi **cả hai** hoặc không gửi. `districtId` phải thuộc `cityId` trong danh mục `RE.LOCATION/API_Spec.md §6` (§1.2 mục 2a). Gửi `city`, `district` → `400 VALIDATION_FAILED` (trường lạ) |
 | `amenities` | string[] | Mã trong danh mục cố định: `AIR_CONDITIONER`, `WATER_HEATER`, `WASHING_MACHINE`, `FRIDGE`, `WIFI`, `PARKING`, `ELEVATOR`, `PRIVATE_BATHROOM`, `BALCONY`, `FURNISHED`, `PET_ALLOWED`; mã lạ → `400 VALIDATION_FAILED` |
 | `lat`, `lng` | number | WGS84 |
 
@@ -46,19 +47,20 @@ Sửa giá hoặc tiền cọc không ảnh hưởng đơn đã tạo (rental gi
 
 | Trạng thái duyệt | Sửa gì | Kết quả |
 |---|---|---|
-| `APPROVED` | `title`, `description`, `propertyType`, `address`/`district`/`city`, `lat`/`lng`, hoặc thêm ảnh (route 8) | `PENDING_REVIEW`, xóa `reviewed_*` |
+| `APPROVED` | `title`, `description`, `propertyType`, `address`/`cityId`/`districtId`, `lat`/`lng`, hoặc thêm ảnh (route 8) | `PENDING_REVIEW`, xóa `reviewed_*` |
 | `APPROVED` | `priceVnd`, `depositAmountVnd`, `areaM2`, `amenities` | Giữ `APPROVED` |
 | `REJECTED` | **Bất kỳ** trường nào, hoặc thêm ảnh | `PENDING_REVIEW` (nộp lại), xóa `reject_reason`, `reviewed_*` |
 | `PENDING_REVIEW` | Bất kỳ | Giữ `PENDING_REVIEW` |
 
 Quy tắc "giá, cọc, diện tích, tiện ích không duyệt lại" chỉ áp cho tin `APPROVED`.
 
-### 1.2 Thứ tự kiểm tra (route 2–5, 7–8)
+### 1.2 Thứ tự kiểm tra (route 2–5, 7–8; route 1 chỉ có mục 2a)
 
 | # | Điều kiện | Kết quả |
 |---|---|---|
 | 1 | Không có hoặc đã xóa | `404 LISTING_NOT_FOUND` |
 | 2 | `owner_id ≠ sub` | `403 LISTING_NOT_OWNER` (BR-03, Báo cáo T04) |
+| 2a | Route 1, 2 (v1.5): có `cityId`/`districtId` mà không có dòng `districts` với `id = districtId AND city_id = cityId` | `400 VALIDATION_FAILED`, `details: [{ field: "districtId", errors: ["Quận/huyện không thuộc tỉnh/thành đã chọn"] }]`. Không thêm mã lỗi (`RE.LOCATION/API_Spec.md §4`) |
 | 3 | Route 5: `status ∈ {HELD, DEPOSITED}` | `409 LISTING_HAS_ACTIVE_DEPOSIT` (BR-03, Báo cáo T18) |
 | 4 | Route 3: `status ≠ AVAILABLE` | `409 LISTING_INVALID_STATUS` |
 | 5 | Route 7: `contentType` ngoài `LISTING_IMAGE_TYPES` | `400 LISTING_IMAGE_INVALID` |
@@ -68,7 +70,7 @@ Quy tắc "giá, cọc, diện tích, tiện ích không duyệt lại" chỉ á
 
 ### 1.3 Tìm kiếm (route 11)
 
-Query: `minPrice`, `maxPrice`, `minArea`, `maxArea`, `district`, `amenities` (mọi tiện ích phải có), `available` (chỉ `AVAILABLE`), `lat` + `lng` + `radiusKm`, `page`, `pageSize`, `sort` (`price_asc`, `price_desc`, `newest` mặc định, `distance` chỉ khi có `lat/lng`); `pageSize` mặc định 20, tối đa 50. Có `lat/lng/radiusKm` thì dùng `ST_DWithin` trên `geography` (index GiST, Báo cáo T05).
+Query: `minPrice`, `maxPrice`, `minArea`, `maxArea`, `cityId`, `districtId` (v1.5, thay `district`), `amenities` (mọi tiện ích phải có), `available` (chỉ `AVAILABLE`), `lat` + `lng` + `radiusKm`, `page`, `pageSize`, `sort` (`price_asc`, `price_desc`, `newest` mặc định, `distance` chỉ khi có `lat/lng`); `pageSize` mặc định 20, tối đa 50. Có `lat/lng/radiusKm` thì dùng `ST_DWithin` trên `geography` (index GiST, Báo cáo T05).
 
 Ngữ nghĩa chi tiết (chốt 2026-11-20; sai bất kỳ điều nào → `400 VALIDATION_FAILED`):
 
@@ -76,7 +78,8 @@ Ngữ nghĩa chi tiết (chốt 2026-11-20; sai bất kỳ điều nào → `400
 |---|---|---|
 | `minPrice`, `maxPrice` | số nguyên ≥ 0 | Lọc `price_vnd`, gồm cả hai đầu. `minPrice > maxPrice` → `400` |
 | `minArea`, `maxArea` | số ≥ 0 | Lọc `area_m2`, gồm cả hai đầu. `minArea > maxArea` → `400` |
-| `district` | chuỗi 1–100 ký tự, bỏ khoảng trắng hai đầu | So khớp **đúng chuỗi** với `listings.district` (phân biệt hoa thường), không `LIKE`, không bỏ dấu |
+| `cityId` | UUID (v1.5) | So khớp `listings.city_id`. Id không có trong danh mục → kết quả rỗng, không lỗi |
+| `districtId` | UUID (v1.5, thay `district` chuỗi) | So khớp `listings.district_id`. Có cả `cityId` mà quận không thuộc tỉnh → kết quả rỗng, không lỗi. Gửi `district` → `400` (tham số lạ) |
 | `amenities` | CSV, ví dụ `WIFI,PARKING` | Mã trong danh mục §1.1; mã lạ → `400`. Tin phải có **mọi** mã (`amenities @> $1`) |
 | `available` | `true` hoặc `false` | `true` chỉ tin `status = AVAILABLE`. Không có hoặc `false`: không lọc thêm, trả `AVAILABLE`, `HELD`, `DEPOSITED`, `RENTED`; luôn loại `HIDDEN` |
 | `lat`, `lng` | số, `-90..90` và `-180..180` | **Phải đi cùng nhau**; thiếu một → `400`. Có cả hai thì response có `distanceM` và `sort=distance` hợp lệ |
@@ -95,7 +98,8 @@ Thứ tự (luôn có khóa phụ ổn định, `non-functional-standards.md §1
 | Trường | Ghi chú |
 |---|---|
 | `id`, `ownerId` | |
-| `title`, `description`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `district`, `city`, `amenities`, `lat`, `lng` | như §1.1; `lat`/`lng` đọc từ `location` |
+| `title`, `description`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `amenities`, `lat`, `lng` | như §1.1; `lat`/`lng` đọc từ `location` |
+| `cityId`, `districtId`, `city`, `district` | v1.5. `city`, `district` là **tên** đọc bằng truy vấn con theo PK tới `cities`, `districts` trong cùng câu (không lưu ở `listings`). Luôn có giá trị (cột `NOT NULL`, §6.1) |
 | `status`, `approvalStatus` | |
 | `rejectReason` | `null` khi chưa bị từ chối |
 | `images` | `[{ id, url, sortOrder }]` xếp theo `sortOrder`, `createdAt`; `url` là presigned GET (`S3_PRESIGN_TTL_SECONDS`), DB chỉ lưu `object_key` |
@@ -105,8 +109,8 @@ Không trả `version`, `held_until`, `held_by_deposit_id`, `reviewed_by`, `revi
 
 | Route | Request | Response |
 |---|---|---|
-| 1 | Body: bắt buộc `title`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `district`, `city`, `lat`, `lng`; tùy chọn `description` (≤ 5000), `amenities` (mặc định `[]`, không trùng) | `201 ListingDto` |
-| 2 | Body: mọi trường của route 1, tùy chọn từng trường, ít nhất một trường; `lat` và `lng` đi cùng nhau | `200 ListingDto` |
+| 1 | Body: bắt buộc `title`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `cityId`, `districtId`, `lat`, `lng`; tùy chọn `description` (≤ 5000), `amenities` (mặc định `[]`, không trùng) | `201 ListingDto` |
+| 2 | Body: mọi trường của route 1, tùy chọn từng trường, ít nhất một trường; `lat` và `lng` đi cùng nhau; `cityId` và `districtId` đi cùng nhau (v1.5) | `200 ListingDto` |
 | 3, 4 | Không body | `200 ListingDto` |
 | 5 | Không body | `204` |
 | 6 | Query `page`, `pageSize` (20, tối đa 50); sắp `created_at DESC, id DESC`; gồm tin `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `HIDDEN`, không gồm tin đã xóa | `200` danh sách `ListingDto`, `meta` phân trang |
@@ -116,14 +120,14 @@ Không trả `version`, `held_until`, `held_by_deposit_id`, `reviewed_by`, `revi
 | 10 | Body `{ reason }` 1–500 ký tự | `200 ListingDto`, `approvalStatus = REJECTED` |
 | 12 | Không | `200 ListingDto` của tin `APPROVED`, chưa xóa. **Tin `HIDDEN` vẫn được trả** (chỉ tìm kiếm, route 11, loại tin `HIDDEN`); `404` khi không có, chưa duyệt hoặc đã xóa |
 
-Giới hạn trường theo DDL §6: `address` ≤ 300, `district`, `city` ≤ 100, `areaM2` ≤ 999999.99, `lat` -90..90, `lng` -180..180.
+Giới hạn trường theo DDL §6: `address` ≤ 300, `cityId`, `districtId` là UUID, `areaM2` ≤ 999999.99, `lat` -90..90, `lng` -180..180.
 
 **`ListingSummaryDto`** (response của route 11; camelCase). Là bản gọn của `ListingDto` cho trang kết quả, để số truy vấn không tăng theo số tin (`Processing_Flow.md §5`):
 
 | Trường | Ghi chú |
 |---|---|
 | `id`, `ownerId` | |
-| `title`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `district`, `city`, `amenities`, `lat`, `lng` | như `ListingDto` |
+| `title`, `propertyType`, `priceVnd`, `depositAmountVnd`, `areaM2`, `address`, `cityId`, `city`, `districtId`, `district`, `amenities`, `lat`, `lng` | như `ListingDto` |
 | `status` | `AVAILABLE`, `HELD`, `DEPOSITED` hoặc `RENTED` (không bao giờ `HIDDEN`) |
 | `coverImageUrl` | Presigned GET của ảnh có `sort_order` nhỏ nhất (rồi `created_at`, `id`); `null` khi tin chưa có ảnh |
 | `distanceM` | Số nguyên, mét, làm tròn; **chỉ có khi** request có `lat` và `lng` |
@@ -225,7 +229,9 @@ CREATE TABLE listings (
   price_vnd bigint NOT NULL CHECK (price_vnd > 0),
   deposit_amount_vnd bigint NOT NULL CHECK (deposit_amount_vnd > 0),
   area_m2 numeric(8,2) NOT NULL,
-  address varchar(300), district varchar(100), city varchar(100),
+  address varchar(300),
+  city_id uuid NOT NULL REFERENCES cities(id),         -- v1.5, thay city varchar(100) (RE.LOCATION §6)
+  district_id uuid NOT NULL REFERENCES districts(id),  -- v1.5, thay district varchar(100)
   location geography(Point, 4326) NOT NULL,
   amenities text[] NOT NULL DEFAULT '{}',
   status varchar(20) NOT NULL DEFAULT 'AVAILABLE'
@@ -242,7 +248,8 @@ CREATE TABLE listings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ix_listings_location ON listings USING GIST (location);
-CREATE INDEX ix_listings_search ON listings (approval_status, status, district) WHERE deleted_at IS NULL;
+CREATE INDEX ix_listings_search ON listings (approval_status, status, district_id) WHERE deleted_at IS NULL;  -- v1.5: district → district_id
+CREATE INDEX ix_listings_city ON listings (approval_status, status, city_id) WHERE deleted_at IS NULL;        -- v1.5: lọc cityId
 CREATE INDEX ix_listings_price ON listings (price_vnd);
 CREATE INDEX ix_listings_owner ON listings (owner_id, created_at DESC);
 -- v1.4 (T2.3): index cho cột lọc, sắp xếp của route 11 (non-functional-standards.md §1, MUST)
@@ -259,6 +266,18 @@ CREATE TABLE listing_images (
 );
 CREATE INDEX ix_listing_images_listing ON listing_images (listing_id, sort_order);  -- v1.2: đọc ảnh theo tin (NFR §1)
 ```
+
+### 6.1 Migration v1.5 (`1733300000000-listings-location-ids.ts`, chạy sau `1733200000000-create-locations.ts` của `RE.LOCATION`)
+
+1. `ADD COLUMN city_id uuid REFERENCES cities(id), ADD COLUMN district_id uuid REFERENCES districts(id)` (tạm cho phép `NULL`).
+2. Ánh xạ theo tên: `UPDATE listings l SET city_id = c.id, district_id = d.id FROM cities c JOIN districts d ON d.city_id = c.id WHERE l.city = c.name AND l.district = d.name`.
+3. **Xóa cứng** tin không ánh xạ được (`city_id IS NULL OR district_id IS NULL`, kể cả tin đã xóa mềm): xóa `listing_images` của các tin đó trước (FK), rồi xóa `listings`; `RAISE NOTICE` số tin, số ảnh đã xóa (chốt 2026-11-26). Object trên S3 của ảnh bị xóa nằm lại (như `tech-debt.md` #14). Rental có thể còn đơn trỏ tới tin bị xóa: API nội bộ trả `404 LISTING_NOT_FOUND` cho các đơn đó (chỉ dữ liệu dev).
+4. `ALTER COLUMN city_id SET NOT NULL, ALTER COLUMN district_id SET NOT NULL`.
+5. `DROP INDEX ix_listings_search`, `DROP COLUMN district, city`, tạo lại `ix_listings_search` trên `district_id` và tạo `ix_listings_city`.
+
+`down`: thêm lại `district`, `city` dạng `varchar(100)`, điền tên qua JOIN (tin đã xóa ở bước 3 không khôi phục), khôi phục `ix_listings_search` cũ, xóa `ix_listings_city`, `city_id`, `district_id`.
+
+Seed `seed:listings` (T2.4) giữ tên trong `seed-listings.data.ts` và ghi `city_id`, `district_id` bằng truy vấn con theo tên (id danh mục khác nhau giữa các môi trường, `RE.LOCATION §1.1`); tên không có trong danh mục → seed báo lỗi, hoàn tác.
 
 ## 7. Đã chốt
 
@@ -293,4 +312,7 @@ CREATE INDEX ix_listing_images_listing ON listing_images (listing_id, sort_order
 
 ## 8. Điểm [cần xác nhận]
 
-Không còn điểm nào (đã chốt 2026-11-20, §7 mục 9–10).
+v1.5 (người dùng trả lời 2026-11-26, chờ A duyệt ở `implementation/van-de-can-quyet-dinh.md` C25):
+
+1. Đổi hợp đồng công khai (MAJOR): body route 1, 2 và query route 11 dùng `cityId`, `districtId` thay chuỗi `city`, `district`; `listings` bỏ hai cột chuỗi. Đổi hành vi đã merge ở T2.2, T2.3 nên cần A chốt (CLAUDE.md §8 NEVER). Giao diện (repo `real-estate`) phải sửa form tạo/sửa tin và bộ lọc tìm kiếm cùng đợt.
+2. ~~Tin có tên không khớp danh mục khi migration~~ — người dùng chốt 2026-11-26: xóa cứng (§6.1 bước 3); `city_id`, `district_id` `NOT NULL`. Thay quyết định 9 cho hai cột này.

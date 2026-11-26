@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/api-gateway/` |
 | **Quy ước** | `standards/coding-convention.md`, `standards/security-policy.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-16 — v1.3 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.4 (đề xuất, chờ A duyệt: C25) |
 
 ## 1. Cấu trúc
 

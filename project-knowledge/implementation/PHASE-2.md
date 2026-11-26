@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-18 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-26 |
 
 **Mục tiêu:** identity đủ phần payment cần; listing đủ API công khai và nội bộ cho saga.
 
@@ -144,3 +144,40 @@ pnpm --filter @realestate/identity test:infra
 Đăng ký qua gateway rồi mở Mailpit `http://localhost:8025` thấy email OTP.
 
 **DoD:** Test 13–23 (gồm 22a) ở `RE.IDENTITY/Component_Class_Design.md §5` pass.
+
+---
+
+## T2.6 listing: danh mục tỉnh/thành, quận/huyện; tin đăng dùng `cityId`, `districtId`
+
+> Task ngoài kế hoạch, thêm 2026-11-26 theo yêu cầu người dùng. **Chưa nhận được** cho tới khi A duyệt C25 (`van-de-can-quyet-dinh.md`) và thiết kế qua `architect-reviewer`.
+
+| | |
+|---|---|
+| **Người làm** | A — tự giao lại khi cần |
+| **Thời lượng** | ~6 giờ (ước 2026-11-26) `[cần xác nhận]` |
+| **Hạn** | `[cần xác nhận]` — A chốt (M1 2026-11-27 không kịp) |
+| **Mã WBS** | Ngoài file xlsx |
+| **Đọc trước** | `design/LISTING/RE.LOCATION/` (v1.0), `design/LISTING/RE.LISTING/CHANGELOG.md` v1.5, `RE.GATEWAY` v1.4 |
+| **Phụ thuộc** | T2.2, T2.3, T2.4 (sửa code đã merge của ba task này) |
+
+**Các bước:**
+
+1. Đối chiếu danh sách 80 quận/huyện (`RE.LOCATION/API_Spec.md §6`) với nguồn chính thức trước 1/7/2025; ghi nguồn vào comment migration.
+2. Migration `1733200000000-create-locations.ts`, entity `City`, `District`, `LocationQueryService`, `LocationsController` (route 1, 2 `RE.LOCATION`).
+3. Migration `1733300000000-listings-location-ids.ts` (`RE.LISTING/API_Spec.md §6.1`); sửa entity, DTO, SQL, presenter, `listing-edit.rules`, `ListingCommandService` theo bảng v1.5 ở `RE.LISTING/Component_Class_Design.md §1`.
+4. Seed `seed:listings` ghi id bằng truy vấn con theo tên; cập nhật fixture test.
+5. Gateway: dòng 6a ở `services/api-gateway/src/gateway/routes.ts` + test `route-resolver.spec.ts`.
+6. Xuất lại `services/listing/openapi.json`; báo repo giao diện đổi form tạo/sửa tin, bộ lọc tìm kiếm.
+
+**Kiểm chứng:**
+
+```powershell
+pnpm --filter @realestate/listing test
+pnpm --filter @realestate/listing test:infra
+pnpm --filter @realestate/api-gateway test
+pnpm --filter @realestate/listing openapi:export
+```
+
+Qua gateway: `GET /api/v1/cities` không token trả 5 tỉnh; `GET /api/v1/districts?cityId=<Hà Nội>&pageSize=50` trả 30; tạo tin với cặp đúng trả `201` có tên tỉnh, quận.
+
+**DoD:** Test 1–9 ở `RE.LOCATION/Component_Class_Design.md §3` và test 18, 22–26 ở `RE.LISTING/Component_Class_Design.md §3` pass; test cũ của listing, gateway vẫn pass; walkthrough `RE_Listing…` cập nhật (CLAUDE.md §8).

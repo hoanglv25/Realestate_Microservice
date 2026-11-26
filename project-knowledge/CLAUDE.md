@@ -104,6 +104,14 @@
 | `design/LISTING/RE.LISTING/Component_Class_Design.md` | Code listing — `ListingHoldService`, test đồng thời |
 | `design/LISTING/RE.LISTING/Processing_Flow.md` | Cần vòng đời trạng thái BĐS, tải ảnh, hai người cùng giữ chỗ |
 
+#### RE.LOCATION — Danh mục tỉnh/thành, quận/huyện (module của listing; đề xuất 2026-11-26, chờ A)
+
+| Đường dẫn | Đọc khi |
+|---|---|
+| `design/LISTING/RE.LOCATION/API_Spec.md` | Làm route `cities`, `districts`, DDL và dữ liệu 5 tỉnh, kiểm cặp `cityId`/`districtId` |
+| `design/LISTING/RE.LOCATION/Component_Class_Design.md` | Code `LocationQueryService`, `LocationsController`, test danh mục |
+| `design/LISTING/RE.LOCATION/Processing_Flow.md` | Cần luồng form chọn tỉnh → quận → tạo tin, số truy vấn |
+
 #### RE.VIEWING — Lịch xem nhà (module của rental, C)
 
 | Đường dẫn | Đọc khi |

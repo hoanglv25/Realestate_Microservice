@@ -2,6 +2,64 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v1.5] — 2026-11-26
+
+- **type:** MAJOR
+- **author:** Claude (đề xuất theo trả lời của người dùng 2026-11-26), chờ A duyệt (`implementation/van-de-can-quyet-dinh.md` C25)
+- **summary:** Tin đăng tham chiếu danh mục địa giới `RE.LOCATION` bằng `cityId`, `districtId`; bỏ cột chuỗi `city`, `district`; tìm kiếm lọc theo id.
+
+### Thay đổi
+
+**1.** Hợp đồng route 1, 2 (body), response `ListingDto`, `ListingSummaryDto`.
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `API_Spec.md` §1.1 (bảng trường, bảng duyệt lại), §1.2 (mục 2a), §1.4 | Sửa |
+
+- **Cũ:** body có `city`, `district` dạng chuỗi tự do 1–100 ký tự; response trả lại đúng chuỗi đó.
+- **Mới:** body có `cityId`, `districtId` (UUID, bắt buộc khi tạo, đi cùng nhau khi sửa, quận phải thuộc tỉnh → `400 VALIDATION_FAILED` nếu sai); response có `cityId`, `districtId` và tên `city`, `district` đọc qua JOIN.
+- **Lý do:** form tạo tin chọn từ danh sách thay vì gõ tự do (yêu cầu người dùng 2026-11-26); chuỗi tự do làm bộ lọc quận (FR03) trượt khi gõ khác chữ.
+
+**2.** Tìm kiếm (route 11).
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 2 | `API_Spec.md` §1.3 | Sửa |
+
+- **Cũ:** `district` so khớp đúng chuỗi.
+- **Mới:** `districtId`, `cityId` (UUID) so khớp `district_id`, `city_id`.
+- **Lý do:** cột chuỗi bị bỏ (mục 3).
+
+**3.** DDL, migration, seed.
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 3 | `API_Spec.md` §6, §6.1 (mới) | Sửa, thêm |
+
+- **Cũ:** `listings.district`, `listings.city` `varchar(100)`; `ix_listings_search` trên `district`.
+- **Mới:** `city_id`, `district_id` `NOT NULL`, có FK tới `cities`, `districts`; migration ánh xạ theo tên, **xóa cứng** tin không ánh xạ được (và ảnh của tin), rồi bỏ cột chuỗi; `ix_listings_search` trên `district_id`, thêm `ix_listings_city`; seed ghi id bằng truy vấn con theo tên.
+- **Lý do:** người dùng chọn chỉ lưu id (2026-11-26), một nguồn tên duy nhất là danh mục.
+
+**4.** Thành phần, test, số truy vấn.
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 4 | `Component_Class_Design.md` §1 (bảng file v1.5), §3 (test 18 sửa; 22–26 thêm) | Sửa, thêm |
+| 5 | `Processing_Flow.md` §5 (tìm kiếm, thêm, sửa) | Sửa |
+| 6 | `API_Spec.md` §8 | Sửa |
+
+### File design đã sửa
+
+- `RE.LISTING/API_Spec.md`, `Component_Class_Design.md`, `Processing_Flow.md`: header v1.4 → v1.5.
+- Mới: `design/LISTING/RE.LOCATION/` (v1.0). Sửa: `RE.GATEWAY` v1.4 (định tuyến `cities`, `districts`).
+
+### Ảnh hưởng
+
+- **Phá hợp đồng công khai:** client gửi `city`/`district` nhận `400` (`forbidNonWhitelisted`). Giao diện (repo `real-estate`) sửa form tạo/sửa tin, trang chi tiết (đọc thêm id) và bộ lọc tìm kiếm cùng đợt. `services/listing/openapi.json` xuất lại.
+- API nội bộ, sự kiện, `contracts/`: không đổi (bản chụp route a không có địa chỉ).
+- Dữ liệu dev: tin có tên không khớp danh mục bị xóa cứng cùng ảnh (`§6.1` bước 3); object S3 của ảnh nằm lại; đơn ở rental trỏ tới tin đó nhận `404` khi gọi API nội bộ.
+- Task: `implementation/PHASE-2.md` T2.6.
+
 ## [v1.4] — 2026-11-20
 
 - **type:** MINOR
