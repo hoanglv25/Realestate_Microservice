@@ -14,8 +14,8 @@ const valid = {
   depositAmountVnd: 3500000,
   areaM2: 25.5,
   address: '1 Đại Cồ Việt',
-  district: 'Hai Bà Trưng',
-  city: 'Hà Nội',
+  cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+  districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
   amenities: ['WIFI', 'FRIDGE'],
   lat: 21.0054,
   lng: 105.8431,
@@ -48,8 +48,8 @@ describe('CreateListingDto', () => {
     'depositAmountVnd',
     'areaM2',
     'address',
-    'district',
-    'city',
+    'cityId',
+    'districtId',
     'lat',
     'lng',
   ])('thiếu %s → lỗi đúng trường đó', async (name) => {
@@ -73,7 +73,8 @@ describe('CreateListingDto', () => {
     ['areaM2 vượt numeric(8,2)', { areaM2: 1000000 }, 'areaM2'],
     ['address trống', { address: '   ' }, 'address'],
     ['address 301 ký tự', { address: 'a'.repeat(301) }, 'address'],
-    ['district 101 ký tự', { district: 'a'.repeat(101) }, 'district'],
+    ['cityId không phải UUID', { cityId: 'Hà Nội' }, 'cityId'],
+    ['districtId không phải UUID', { districtId: 'Hai Bà Trưng' }, 'districtId'],
     ['description 5001 ký tự', { description: 'a'.repeat(5001) }, 'description'],
     ['lat > 90', { lat: 90.1 }, 'lat'],
     ['lng < -180', { lng: -180.1 }, 'lng'],
@@ -113,21 +114,21 @@ describe('CreateListingDto', () => {
     expect((await parse(CreateListingDto, { ...valid, amenities: all })).fields).toEqual([]);
   });
 
-  it('cắt khoảng trắng hai đầu title, address, district, city', async () => {
+  it('cắt khoảng trắng hai đầu title, address', async () => {
     const { dto, fields } = await parse(CreateListingDto, {
       ...valid,
       title: '  Phòng đẹp  ',
       address: ' 1 Đại Cồ Việt ',
-      district: ' Hai Bà Trưng ',
-      city: ' Hà Nội ',
     });
     expect(fields).toEqual([]);
-    expect(dto).toMatchObject({
-      title: 'Phòng đẹp',
-      address: '1 Đại Cồ Việt',
-      district: 'Hai Bà Trưng',
-      city: 'Hà Nội',
-    });
+    expect(dto).toMatchObject({ title: 'Phòng đẹp', address: '1 Đại Cồ Việt' });
+  });
+
+  it.each([
+    ['city', { city: 'Hà Nội' }],
+    ['district', { district: 'Hai Bà Trưng' }],
+  ])('v1.5: gửi %s dạng chuỗi (hợp đồng cũ) → trường lạ, từ chối', async (name, patch) => {
+    expect((await parse(CreateListingDto, { ...valid, ...patch })).fields).toContain(name);
   });
 
   it.each(['ownerId', 'status', 'approvalStatus', 'id'])(
@@ -159,6 +160,24 @@ describe('UpdateListingDto', () => {
     expect((await parse(UpdateListingDto, { lat: 21.0 })).fields).toContain('lng');
     expect((await parse(UpdateListingDto, { lng: 105.8 })).fields).toContain('lat');
     expect((await parse(UpdateListingDto, { lat: 21.0, lng: 105.8 })).fields).toEqual([]);
+  });
+
+  it('cityId và districtId đi cùng nhau: gửi một nửa → lỗi ở nửa còn thiếu', async () => {
+    expect(
+      (await parse(UpdateListingDto, { cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11' })).fields,
+    ).toContain('districtId');
+    expect(
+      (await parse(UpdateListingDto, { districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33' }))
+        .fields,
+    ).toContain('cityId');
+    expect(
+      (
+        await parse(UpdateListingDto, {
+          cityId: '0b6d6b9e-4c1f-4d0a-9a51-2f3f3c1d9e11',
+          districtId: '5f1c2a7e-7b0e-4f43-8a3d-0e6c9f1b2a33',
+        })
+      ).fields,
+    ).toEqual([]);
   });
 
   it('lat ngoài khoảng vẫn bị từ chối khi gửi cả đôi', async () => {

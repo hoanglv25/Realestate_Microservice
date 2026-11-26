@@ -33,8 +33,11 @@ export class ListingDto {
   @ApiProperty({ type: 'integer' }) depositAmountVnd!: number;
   @ApiProperty({ type: 'number' }) areaM2!: number;
   @ApiPropertyOptional({ nullable: true, type: String }) address!: string | null;
-  @ApiPropertyOptional({ nullable: true, type: String }) district!: string | null;
-  @ApiPropertyOptional({ nullable: true, type: String }) city!: string | null;
+  @ApiProperty({ format: 'uuid', description: 'Tỉnh/thành (RE.LOCATION)' }) cityId!: string;
+  @ApiProperty({ example: 'Hà Nội', description: 'Tên tỉnh/thành, đọc từ danh mục' }) city!: string;
+  @ApiProperty({ format: 'uuid', description: 'Quận/huyện (RE.LOCATION)' }) districtId!: string;
+  @ApiProperty({ example: 'Hai Bà Trưng', description: 'Tên quận/huyện, đọc từ danh mục' })
+  district!: string;
   @ApiProperty({ enum: AMENITIES, isArray: true }) amenities!: string[];
   @ApiProperty({ type: 'number' }) lat!: number;
   @ApiProperty({ type: 'number' }) lng!: number;

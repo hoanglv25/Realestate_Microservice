@@ -40,6 +40,11 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
   let ds: DataSource;
   let storage: StorageService;
   const queries: string[] = [];
+  /** `RE.LOCATION`: id theo tên, nạp sau migration. Khóa tỉnh: tên; khóa quận: `tỉnh|quận`. */
+  const cityIds = new Map<string, string>();
+  const districtIds = new Map<string, string>();
+  const cid = (city: string) => cityIds.get(city)!;
+  const did = (city: string, district: string) => districtIds.get(`${city}|${district}`)!;
   const uploadedKeys = new Set<string>();
   const jwt = new JwtService();
 
@@ -70,8 +75,8 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     depositAmountVnd: 3500000,
     areaM2: 25.5,
     address: '1 Đại Cồ Việt',
-    district: 'Hai Bà Trưng',
-    city: 'Hà Nội',
+    cityId: cid('Hà Nội'),
+    districtId: did('Hà Nội', 'Hai Bà Trưng'),
     amenities: ['WIFI', 'FRIDGE'],
     lat: 21.0054,
     lng: 105.8431,
@@ -153,6 +158,14 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     storage = t.app.get(StorageService);
     await storage.bucketsReady;
     await ds.runMigrations();
+    const loc = await pg.query<{ cid: string; city: string; did: string; district: string }>(
+      `SELECT c.id AS cid, c.name AS city, d.id AS did, d.name AS district
+         FROM districts d JOIN cities c ON c.id = d.city_id`,
+    );
+    for (const r of loc.rows) {
+      cityIds.set(r.city, r.cid);
+      districtIds.set(`${r.city}|${r.district}`, r.did);
+    }
     const noop = () => undefined;
     (ds as unknown as { logger: unknown }).logger = {
       logQuery: (q: string) => queries.push(q),
@@ -275,6 +288,7 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
       expect(dto.lat).toBeCloseTo(21.0054, 6);
       expect(dto.lng).toBeCloseTo(105.8431, 6);
       expect(dto).not.toHaveProperty('version');
+      expect(dto).not.toHaveProperty('cityName');
       expect(dto).not.toHaveProperty('heldUntil');
       expect(await publicStatus(dto.id)).toBe(404);
       // PostGIS lưu (lng, lat): kiểm thẳng trong DB
@@ -380,8 +394,6 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
       ['description', { description: 'Mô tả khác' }],
       ['propertyType', { propertyType: 'HOUSE' }],
       ['address', { address: '2 Tạ Quang Bửu' }],
-      ['district', { district: 'Cầu Giấy' }],
-      ['city', { city: 'Hồ Chí Minh' }],
       ['vị trí lat/lng', { lat: 21.02, lng: 105.85 }],
     ])('sửa tin APPROVED: %s → PENDING_REVIEW', async (_name, patch) => {
       const id = await newListing(landlordA, {}, true);
@@ -681,6 +693,12 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
       counts.updateNoChange = await countQueries(() =>
         owner.patch(`/api/v1/listings/${id}`, { title: 'Tiêu đề khác hẳn' }),
       );
+      counts.updateLocation = await countQueries(() =>
+        owner.patch(`/api/v1/listings/${id}`, {
+          cityId: cid('Hà Nội'),
+          districtId: did('Hà Nội', 'Cầu Giấy'),
+        }),
+      );
       counts.approve = await countQueries(() =>
         as(admin.token).post(`/api/v1/admin/listings/${id}/approve`),
       );
@@ -712,6 +730,7 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
         'create',
         'updateContent',
         'updateNoChange',
+        'updateLocation',
         'approve',
         'rejectAlreadyReviewed',
         'hide',
@@ -728,6 +747,131 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
       }
       expect(counts.detail).toBeLessThanOrEqual(3);
       expect(counts.mine).toBeLessThanOrEqual(4);
+      // Test 26 (v1.5, RE.LISTING/Processing_Flow.md §5): kiểm cặp tỉnh/quận cộng 1, tên lấy trong cùng câu
+      expect(counts.create).toBeLessThanOrEqual(4);
+      expect(counts.updateLocation).toBeLessThanOrEqual(4);
+      expect(counts.updateContent).toBeLessThanOrEqual(3);
+    });
+  });
+
+  describe('v1.5: tỉnh/thành, quận/huyện theo id (RE.LISTING test 22–24)', () => {
+    it('Test 22: tạo tin với cặp đúng → 201, trả id và tên; DB lưu id', async () => {
+      const res = await as(landlordA.token).post('/api/v1/listings', valid());
+      expect(res.status).toBe(201);
+      expect(res.body.data).toMatchObject({
+        cityId: cid('Hà Nội'),
+        city: 'Hà Nội',
+        districtId: did('Hà Nội', 'Hai Bà Trưng'),
+        district: 'Hai Bà Trưng',
+      });
+      const db = await row(res.body.data.id);
+      expect(db.city_id).toBe(cid('Hà Nội'));
+      expect(db.district_id).toBe(did('Hà Nội', 'Hai Bà Trưng'));
+      expect(db).not.toHaveProperty('city');
+      expect(db).not.toHaveProperty('district');
+      // chi tiết công khai, của tôi, tìm kiếm cũng có tên (sau khi duyệt)
+      await as(admin.token).post(`/api/v1/admin/listings/${res.body.data.id}/approve`);
+      const detail = await t.http().get(`/api/v1/listings/${res.body.data.id}`);
+      expect(detail.body.data).toMatchObject({ city: 'Hà Nội', district: 'Hai Bà Trưng' });
+    });
+
+    it('Test 23: tạo với quận của tỉnh khác hoặc id không có → 400 VALIDATION_FAILED (districtId), không tạo', async () => {
+      const before = await pg.query(`SELECT count(*)::int AS n FROM listings`);
+      for (const over of [
+        { cityId: cid('Hồ Chí Minh'), districtId: did('Hà Nội', 'Ba Đình') },
+        { districtId: randomUUID() },
+        { cityId: randomUUID() },
+      ]) {
+        const res = await as(landlordA.token).post('/api/v1/listings', valid(over));
+        expect(res.status).toBe(400);
+        expect(res.body.error.code).toBe('VALIDATION_FAILED');
+        expect(res.body.error.details).toEqual([
+          { field: 'districtId', errors: ['Quận/huyện không thuộc tỉnh/thành đã chọn'] },
+        ]);
+      }
+      const after = await pg.query(`SELECT count(*)::int AS n FROM listings`);
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it('Test 23: gửi city/district chuỗi (hợp đồng cũ), thiếu cityId → 400', async () => {
+      const legacy: Record<string, unknown> = {
+        ...valid(),
+        city: 'Hà Nội',
+        district: 'Hai Bà Trưng',
+      };
+      delete legacy.cityId;
+      delete legacy.districtId;
+      const res = await as(landlordA.token).post('/api/v1/listings', legacy);
+      expect(res.status).toBe(400);
+      const fields = (res.body.error.details as Array<{ field: string }>).map((d) => d.field);
+      expect(fields).toEqual(expect.arrayContaining(['city', 'district', 'cityId', 'districtId']));
+    });
+
+    it('Test 23: sửa với cặp sai hoặc chỉ một trường → 400, tin không đổi', async () => {
+      const id = await newListing();
+      const owner = as(landlordA.token);
+      const wrong = await owner.patch(`/api/v1/listings/${id}`, {
+        cityId: cid('Đà Nẵng'),
+        districtId: did('Hà Nội', 'Cầu Giấy'),
+        title: 'Không được ghi',
+      });
+      expect(wrong.status).toBe(400);
+      expect(wrong.body.error.details).toEqual([
+        { field: 'districtId', errors: ['Quận/huyện không thuộc tỉnh/thành đã chọn'] },
+      ]);
+      const half = await owner.patch(`/api/v1/listings/${id}`, { cityId: cid('Đà Nẵng') });
+      expect(half.status).toBe(400);
+      const db = await row(id);
+      expect(db.title).toBe('Phòng 25m2 gần ĐH Bách Khoa');
+      expect(db.district_id).toBe(did('Hà Nội', 'Hai Bà Trưng'));
+    });
+
+    it('Test 23: cặp sai do người khác gửi → 403 trước 400 (thứ tự §1.2: 404 → 403 → 2a)', async () => {
+      const id = await newListing();
+      const res = await as(landlordB.token).patch(`/api/v1/listings/${id}`, {
+        cityId: cid('Đà Nẵng'),
+        districtId: did('Hà Nội', 'Cầu Giấy'),
+      });
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe('LISTING_NOT_OWNER');
+    });
+
+    it('Test 24: sửa tỉnh/quận của tin APPROVED → PENDING_REVIEW, response có tên mới', async () => {
+      const id = await newListing(landlordA, {}, true);
+      const res = await as(landlordA.token).patch(`/api/v1/listings/${id}`, {
+        cityId: cid('Hồ Chí Minh'),
+        districtId: did('Hồ Chí Minh', 'Quận 1'),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({
+        approvalStatus: 'PENDING_REVIEW',
+        cityId: cid('Hồ Chí Minh'),
+        city: 'Hồ Chí Minh',
+        districtId: did('Hồ Chí Minh', 'Quận 1'),
+        district: 'Quận 1',
+      });
+    });
+
+    it('Test 24: chỉ đổi quận trong cùng tỉnh của tin APPROVED → PENDING_REVIEW', async () => {
+      const id = await newListing(landlordA, {}, true);
+      const res = await as(landlordA.token).patch(`/api/v1/listings/${id}`, {
+        cityId: cid('Hà Nội'),
+        districtId: did('Hà Nội', 'Cầu Giấy'),
+      });
+      expect(res.body.data).toMatchObject({
+        approvalStatus: 'PENDING_REVIEW',
+        district: 'Cầu Giấy',
+      });
+    });
+
+    it('gửi lại đúng cặp cũ cho tin APPROVED → giữ APPROVED', async () => {
+      const id = await newListing(landlordA, {}, true);
+      const res = await as(landlordA.token).patch(`/api/v1/listings/${id}`, {
+        cityId: cid('Hà Nội'),
+        districtId: did('Hà Nội', 'Hai Bà Trưng'),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.data.approvalStatus).toBe('APPROVED');
     });
   });
 });

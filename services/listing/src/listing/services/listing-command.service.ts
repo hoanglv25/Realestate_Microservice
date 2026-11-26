@@ -14,6 +14,7 @@ import {
 import { classifyEdit, EditableFields, resubmits } from './listing-edit.rules';
 import { ListingPresenter } from './listing.presenter';
 import { listingColumns, ListingRow, pointSql, rowsOf } from './listing.sql';
+import { LocationQueryService } from './location-query.service';
 
 /** Trường sửa được → cột DB (tên cột cố định ở đây, không lấy từ input). `lat`, `lng` đi qua `location`. */
 const COLUMN_OF: Record<string, string> = {
@@ -24,8 +25,8 @@ const COLUMN_OF: Record<string, string> = {
   depositAmountVnd: 'deposit_amount_vnd',
   areaM2: 'area_m2',
   address: 'address',
-  district: 'district',
-  city: 'city',
+  cityId: 'city_id',
+  districtId: 'district_id',
   amenities: 'amenities',
 };
 
@@ -37,12 +38,18 @@ const toEditable = (row: ListingRow): EditableFields => ({
   depositAmountVnd: row.depositAmountVnd,
   areaM2: row.areaM2,
   address: row.address,
-  district: row.district,
-  city: row.city,
+  cityId: row.cityId,
+  districtId: row.districtId,
   amenities: row.amenities,
   lat: row.lat,
   lng: row.lng,
 });
+
+/** `400 VALIDATION_FAILED` khi quận không thuộc tỉnh (`RE.LISTING/API_Spec.md §1.2` mục 2a, không thêm mã lỗi). */
+const districtNotInCity = () =>
+  new AppException(ErrorCode.VALIDATION_FAILED, 'Dữ liệu không hợp lệ', 400, [
+    { field: 'districtId', errors: ['Quận/huyện không thuộc tỉnh/thành đã chọn'] },
+  ]);
 
 /**
  * Thêm, sửa, ẩn, hiện, xóa mềm sản phẩm của chủ trọ (`RE.LISTING/API_Spec.md §1`, route 1–5).
@@ -57,14 +64,18 @@ export class ListingCommandService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly presenter: ListingPresenter,
+    private readonly locations: LocationQueryService,
   ) {}
 
   /** Route 1. `PENDING_REVIEW` + `AVAILABLE`: chưa hiện ở tìm kiếm cho tới khi quản trị viên duyệt. */
   async create(ownerId: string, dto: CreateListingDto): Promise<ListingDto> {
+    if (!(await this.locations.isDistrictInCity(dto.cityId, dto.districtId))) {
+      throw districtNotInCity();
+    }
     const [row] = await this.dataSource.query<ListingRow[]>(
       `INSERT INTO listings AS l
          (owner_id, title, description, property_type, price_vnd, deposit_amount_vnd, area_m2,
-          address, district, city, amenities, location)
+          address, city_id, district_id, amenities, location)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], ${pointSql('$13', '$12')})
        RETURNING ${listingColumns('l')}`,
       [
@@ -76,8 +87,8 @@ export class ListingCommandService {
         dto.depositAmountVnd,
         dto.areaM2,
         dto.address,
-        dto.district,
-        dto.city,
+        dto.cityId,
+        dto.districtId,
         dto.amenities ?? [],
         dto.lat,
         dto.lng,
@@ -103,6 +114,14 @@ export class ListingCommandService {
 
     const row = await this.dataSource.transaction(async (manager) => {
       const current = await this.lockOwned(manager, id, ownerId);
+      // Mục 2a §1.2: sau 404/403. DTO bảo đảm hai trường đi cùng nhau
+      if (
+        patch.cityId !== undefined &&
+        patch.districtId !== undefined &&
+        !(await this.locations.isDistrictInCity(patch.cityId, patch.districtId))
+      ) {
+        throw districtNotInCity();
+      }
       const edit = classifyEdit(toEditable(current), patch);
       if (edit.changed.length === 0) return current; // gửi lại đúng giá trị cũ: không ghi gì
 

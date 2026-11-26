@@ -59,7 +59,10 @@ describe('seedListings với Postgres thật', () => {
     const rows = (
       await pg.query(
         `SELECT id, owner_id, title, property_type, price_vnd::float8 AS price, deposit_amount_vnd::float8 AS deposit,
-                area_m2::float8 AS area, district, city, amenities, status, approval_status, reject_reason,
+                area_m2::float8 AS area,
+                (SELECT name FROM districts WHERE id = district_id) AS district,
+                (SELECT name FROM cities WHERE id = city_id) AS city,
+                amenities, status, approval_status, reject_reason,
                 reviewed_at, held_until, held_by_deposit_id, deleted_at,
                 ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
            FROM listings ORDER BY id`,
@@ -90,6 +93,33 @@ describe('seedListings với Postgres thật', () => {
       // duyệt rồi (APPROVED, REJECTED) thì có reviewed_at; chưa duyệt thì không
       expect(row.reviewed_at !== null).toBe(seed.approvalStatus !== 'PENDING_REVIEW');
     }
+  });
+
+  it('v1.5: tin seed có city_id, district_id trỏ đúng danh mục RE.LOCATION', async () => {
+    await seedListings(ds);
+    const { rows } = await pg.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM listings l
+         JOIN districts d ON d.id = l.district_id AND d.city_id = l.city_id`,
+    );
+    expect(rows[0].n).toBe(30);
+  });
+
+  it('v1.5: tên quận không có trong danh mục → seed lỗi, hoàn tác (không tạo tin nào)', async () => {
+    await seedListings(ds);
+    // 29 tin đã có (ON CONFLICT bỏ qua); xóa tin cuối và đổi tên quận của nó để đi tới INSERT mới
+    await pg.query(`DELETE FROM listings WHERE id = $1`, [SEED_LISTINGS[29].id]);
+    const before = await pg.query<{ n: number }>(`SELECT count(*)::int AS n FROM listings`);
+    const last = SEED_LISTINGS[29] as { district: string };
+    const saved = last.district;
+    last.district = 'Quận Không Tồn Tại';
+    try {
+      await expect(seedListings(ds)).rejects.toThrow();
+    } finally {
+      last.district = saved;
+    }
+    const after = await pg.query<{ n: number }>(`SELECT count(*)::int AS n FROM listings`);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+    await expect(seedListings(ds)).resolves.toEqual({ created: 1, existing: 29 });
   });
 
   it('chạy lại: created 0, existing 30, không đổi dữ liệu', async () => {

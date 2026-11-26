@@ -264,12 +264,14 @@ describe('Tìm kiếm tin đăng với hạ tầng thật', () => {
       const owner = randomUUID();
       await pg.query(
         `INSERT INTO listings (owner_id, title, property_type, price_vnd, deposit_amount_vnd, area_m2,
-                               address, district, city, location, approval_status)
+                               address, city_id, district_id, location, approval_status)
          SELECT $1, 'Tin ngẫu nhiên ' || g, 'ROOM', 2000000 + (random() * 8000000)::bigint, 2000000,
-                15 + random() * 50, 'x', 'Q' || (g % 10), 'Hà Nội',
+                15 + random() * 50, 'x', d.city_id, d.id,
                 ST_SetSRID(ST_MakePoint(105.70 + random() * 0.30, 20.90 + random() * 0.25), 4326)::geography,
                 'APPROVED'
-           FROM generate_series(1, 5000) g`,
+           FROM generate_series(1, 5000) g
+           CROSS JOIN LATERAL (SELECT id, city_id FROM districts ORDER BY sort_order, id
+                                OFFSET (g % 10) LIMIT 1) d`,
         [owner],
       );
       await pg.query('ANALYZE listings');
@@ -340,13 +342,40 @@ describe('Tìm kiếm tin đăng với hạ tầng thật', () => {
       );
     });
 
-    it('quận: so khớp đúng chuỗi (có dấu), phân biệt hoa thường', async () => {
-      sameSet(
-        titles(await search(`district=${encodeURIComponent('Hai Bà Trưng')}`)),
-        expected((p) => p.over.district === 'Hai Bà Trưng'),
+    it('v1.5: quận theo districtId, tỉnh theo cityId; id không có hoặc quận khác tỉnh → rỗng', async () => {
+      const ids = await pg.query<{ city: string; district: string; cid: string; did: string }>(
+        `SELECT c.name AS city, d.name AS district, c.id AS cid, d.id AS did
+           FROM districts d JOIN cities c ON c.id = d.city_id`,
       );
-      expect(titles(await search(`district=${encodeURIComponent('hai bà trưng')}`))).toEqual([]);
-      expect(titles(await search(`district=${encodeURIComponent('Hai Ba Trung')}`))).toEqual([]);
+      const did = (city: string, district: string) =>
+        ids.rows.find((r) => r.city === city && r.district === district)!.did;
+      const cid = (city: string) => ids.rows.find((r) => r.city === city)!.cid;
+      const hbt = did('Hà Nội', 'Hai Bà Trưng');
+      sameSet(
+        titles(await search(`districtId=${hbt}`)),
+        expected((p) => (p.over.district ?? 'Hai Bà Trưng') === 'Hai Bà Trưng'),
+      );
+      sameSet(
+        titles(await search(`cityId=${cid('Hà Nội')}`)),
+        expected(() => true),
+      );
+      sameSet(
+        titles(await search(`cityId=${cid('Hà Nội')}&districtId=${hbt}`)),
+        expected((p) => (p.over.district ?? 'Hai Bà Trưng') === 'Hai Bà Trưng'),
+      );
+      expect(titles(await search(`cityId=${cid('Hồ Chí Minh')}`))).toEqual([]);
+      expect(titles(await search(`cityId=${cid('Hồ Chí Minh')}&districtId=${hbt}`))).toEqual([]);
+      expect(titles(await search(`districtId=${randomUUID()}`))).toEqual([]);
+      const legacy = await search(`district=${encodeURIComponent('Hai Bà Trưng')}`);
+      expect(legacy.status).toBe(400);
+    });
+
+    it('v1.5: kết quả có cityId, city, districtId, district (tên từ danh mục)', async () => {
+      const res = await search('pageSize=1');
+      expect(res.body.data[0]).toMatchObject({ city: 'Hà Nội' });
+      expect(res.body.data[0].cityId).toEqual(expect.any(String));
+      expect(res.body.data[0].districtId).toEqual(expect.any(String));
+      expect(res.body.data[0].district).toEqual(expect.any(String));
     });
 
     it('tiện ích: tin phải có MỌI mã (CSV hoặc lặp tham số)', async () => {
