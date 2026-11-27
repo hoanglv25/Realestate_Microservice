@@ -106,15 +106,15 @@ export const envSchema = Joi.object<EnvVars>({
   OUTBOX_BATCH_SIZE: Joi.number().integer().min(1).max(500).default(50),
   OUTBOX_RELAY_ENABLED: Joi.boolean().default(true),
 
-  // --- Object storage S3 (Silo ở dev, xem docs/adr/ADR-007), chỉ có tác dụng khi có S3_ENDPOINT ---
+  // --- Object storage S3 (Cloudflare R2, xem decisions/0016), chỉ có tác dụng khi có S3_ENDPOINT ---
   S3_ENDPOINT: optionalString.uri({ scheme: ['http', 'https'] }),
-  // Địa chỉ trình duyệt dùng để mở presigned URL (service trong Docker thấy s3:9000, trình duyệt thì không)
+  // Host ký vào presigned URL khi khác host service gọi (R2: để trống, dùng S3_ENDPOINT)
   S3_PUBLIC_ENDPOINT: optionalString.uri({ scheme: ['http', 'https'] }),
   S3_REGION: Joi.string().trim().min(1).default('us-east-1'),
   S3_ACCESS_KEY: optionalString,
   S3_SECRET_KEY: optionalString,
   S3_FORCE_PATH_STYLE: Joi.boolean().default(true),
-  // Bucket service tự tạo lúc khởi động, cách nhau dấu phẩy (ví dụ: listing-images)
+  // Bucket CÓ SẴN service dùng, cách nhau dấu phẩy (ví dụ: listing-images); bucket đầu cho health check
   S3_BUCKETS: Joi.string()
     .trim()
     .empty('')

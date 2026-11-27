@@ -3,9 +3,8 @@ import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { SEED_LISTINGS } from '../src/listing/seed/seed-listings.data';
 import { LocationQueryService } from '../src/listing/services/location-query.service';
-import { StorageService } from '../src/storage/storage.service';
 import type { TestApp } from './helpers/create-test-app';
-import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
+import { INFRA_TEST_SCHEMA } from './helpers/infra';
 
 /**
  * Danh mục tỉnh/thành, quận/huyện (`RE.LOCATION`) với Postgres + PostGIS THẬT: migration nạp dữ liệu,
@@ -16,13 +15,7 @@ import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
  * Dữ liệu mong đợi viết lại độc lập ở đây (không đọc từ migration) để test bắt được migration sai.
  */
 const BUCKET = 'listing-images';
-const ENV_NAMES = [
-  'S3_ENDPOINT',
-  'S3_PUBLIC_ENDPOINT',
-  'S3_ACCESS_KEY',
-  'S3_SECRET_KEY',
-  'S3_BUCKETS',
-];
+const ENV_NAMES = ['S3_ENDPOINT', 'S3_REGION', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'S3_BUCKETS'];
 
 const CITIES = ['Hà Nội', 'Hồ Chí Minh', 'Đà Nẵng', 'Bình Dương', 'Đồng Nai'];
 const HA_NOI = [
@@ -91,23 +84,21 @@ describe('Danh mục tỉnh/thành, quận/huyện với hạ tầng thật', ()
   }
 
   beforeAll(async () => {
-    const root = readRootEnv();
     pg = new Client({ connectionString: process.env.DATABASE_URL });
     await pg.connect();
     await pg.query(`DROP SCHEMA IF EXISTS ${INFRA_TEST_SCHEMA} CASCADE`);
     await pg.query(`CREATE SCHEMA ${INFRA_TEST_SCHEMA}`);
-    const s3 = `http://localhost:${root.S3_API_PORT ?? '9000'}`;
+    // Không gọi S3 trong file này (service không tạo bucket lúc khởi động, decisions/0016): giá trị giả
     Object.assign(process.env, {
-      S3_ENDPOINT: s3,
-      S3_PUBLIC_ENDPOINT: s3,
-      S3_ACCESS_KEY: root.S3_ACCESS_KEY,
-      S3_SECRET_KEY: root.S3_SECRET_KEY,
+      S3_ENDPOINT: 'http://s3.invalid',
+      S3_REGION: 'auto',
+      S3_ACCESS_KEY: 'khong-dung',
+      S3_SECRET_KEY: 'khong-dung',
       S3_BUCKETS: BUCKET,
     });
     const { createTestApp } = await import('./helpers/create-test-app');
     t = await createTestApp();
     ds = t.app.get(DataSource);
-    await t.app.get(StorageService).bucketsReady;
     await ds.runMigrations();
     const { rows } = await pg.query<{ id: string; name: string }>(
       `SELECT id, name FROM ${INFRA_TEST_SCHEMA}.cities`,

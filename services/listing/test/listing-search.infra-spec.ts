@@ -4,13 +4,12 @@ import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { SearchListingsQuery } from '../src/listing/dto/search-listings.query';
 import { buildSearchSql } from '../src/listing/services/listing-search.sql';
-import { StorageService } from '../src/storage/storage.service';
 import type { TestApp } from './helpers/create-test-app';
-import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
+import { INFRA_TEST_SCHEMA } from './helpers/infra';
 import { FixtureListing, haversineM, insertListing } from './helpers/listing-fixtures';
 
 /**
- * Tìm kiếm `GET /api/v1/listings` (route 11) với Postgres + PostGIS + S3 THẬT (`pnpm infra:up`, rồi
+ * Tìm kiếm `GET /api/v1/listings` (route 11) với Postgres + PostGIS THẬT (`pnpm infra:up`, rồi
  * `pnpm test:infra`). Test thiết kế 4, 18, 19 (`RE.LISTING/Component_Class_Design.md §3`, v1.4).
  *
  * Test 4 chạy trên fixture: tin tọa độ thật ở Hà Nội với khoảng cách tới Bách Khoa được tính ĐỘC LẬP
@@ -18,13 +17,7 @@ import { FixtureListing, haversineM, insertListing } from './helpers/listing-fix
  * chứng minh được index GiST (với vài chục dòng planner quét tuần tự). Seed thật là T2.4.
  */
 const BUCKET = 'listing-images';
-const ENV_NAMES = [
-  'S3_ENDPOINT',
-  'S3_PUBLIC_ENDPOINT',
-  'S3_ACCESS_KEY',
-  'S3_SECRET_KEY',
-  'S3_BUCKETS',
-];
+const ENV_NAMES = ['S3_ENDPOINT', 'S3_REGION', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'S3_BUCKETS'];
 
 /** Điểm tìm: ĐH Bách Khoa Hà Nội. */
 const CENTER = { lat: 21.0054, lng: 105.8431 };
@@ -133,23 +126,21 @@ describe('Tìm kiếm tin đăng với hạ tầng thật', () => {
   }
 
   beforeAll(async () => {
-    const root = readRootEnv();
     pg = new Client({ connectionString: process.env.DATABASE_URL });
     await pg.connect();
     await pg.query(`DROP SCHEMA IF EXISTS ${INFRA_TEST_SCHEMA} CASCADE`);
     await pg.query(`CREATE SCHEMA ${INFRA_TEST_SCHEMA}`);
-    const s3 = `http://localhost:${root.S3_API_PORT ?? '9000'}`;
+    // Không gọi S3 trong file này (service không tạo bucket lúc khởi động, decisions/0016): giá trị giả
     Object.assign(process.env, {
-      S3_ENDPOINT: s3,
-      S3_PUBLIC_ENDPOINT: s3,
-      S3_ACCESS_KEY: root.S3_ACCESS_KEY,
-      S3_SECRET_KEY: root.S3_SECRET_KEY,
+      S3_ENDPOINT: 'http://s3.invalid',
+      S3_REGION: 'auto',
+      S3_ACCESS_KEY: 'khong-dung',
+      S3_SECRET_KEY: 'khong-dung',
       S3_BUCKETS: BUCKET,
     });
     const { createTestApp } = await import('./helpers/create-test-app');
     t = await createTestApp();
     ds = t.app.get(DataSource);
-    await t.app.get(StorageService).bucketsReady;
     await ds.runMigrations();
 
     // Tin tìm thấy được: tọa độ thật

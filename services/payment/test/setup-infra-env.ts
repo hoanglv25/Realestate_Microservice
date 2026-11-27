@@ -35,7 +35,7 @@ Object.assign(process.env, {
   PAYOS_API_KEY: 'api-key-test',
   PAYOS_CHECKSUM_KEY: 'checksum-key-test',
 });
-// S3 do storage.infra-spec.ts tự bật (để test messaging không có thêm check 's3')
+// S3 do storage.infra-spec.ts tự bật khi .env gốc có cấu hình R2 (để test messaging không có thêm check 's3')
 for (const name of [
   'REDIS_URL',
   'RABBITMQ_QUEUE',

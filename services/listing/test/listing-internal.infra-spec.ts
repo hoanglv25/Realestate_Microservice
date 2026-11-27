@@ -1,14 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { DataSource } from 'typeorm';
-import { StorageService } from '../src/storage/storage.service';
 import { expectResponseMatchesOpenApi } from './helpers/contracts';
 import type { TestApp } from './helpers/create-test-app';
-import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
+import { INFRA_TEST_SCHEMA } from './helpers/infra';
 import { FixtureListing, insertListing } from './helpers/listing-fixtures';
 
 /**
- * API nội bộ `/internal/listings/*` (bản chụp, giữ chỗ, đổi trạng thái) với Postgres + S3 THẬT
+ * API nội bộ `/internal/listings/*` (bản chụp, giữ chỗ, đổi trạng thái) với Postgres THẬT
  * (`pnpm infra:up`, rồi `pnpm test:infra`). Test thiết kế 5–11, 20, 21 (`RE.LISTING/Component_Class_Design.md §3`).
  * Mọi response phải khớp `contracts/openapi/listing-internal.v1.yaml` (DoD của T2.3).
  */
@@ -17,13 +16,7 @@ const SPEC = 'listing-internal.v1.yaml';
 const SNAPSHOT_PATH = '/internal/listings/{id}';
 const HOLD_PATH = '/internal/listings/{id}/holds';
 const STATUS_PATH = '/internal/listings/{id}/status';
-const ENV_NAMES = [
-  'S3_ENDPOINT',
-  'S3_PUBLIC_ENDPOINT',
-  'S3_ACCESS_KEY',
-  'S3_SECRET_KEY',
-  'S3_BUCKETS',
-];
+const ENV_NAMES = ['S3_ENDPOINT', 'S3_REGION', 'S3_ACCESS_KEY', 'S3_SECRET_KEY', 'S3_BUCKETS'];
 
 const inMinutes = (m: number): Date => new Date(Date.now() + m * 60_000);
 
@@ -62,23 +55,21 @@ describe('API nội bộ giữ chỗ, đổi trạng thái với hạ tầng th�
   }
 
   beforeAll(async () => {
-    const root = readRootEnv();
     pg = new Client({ connectionString: process.env.DATABASE_URL });
     await pg.connect();
     await pg.query(`DROP SCHEMA IF EXISTS ${INFRA_TEST_SCHEMA} CASCADE`);
     await pg.query(`CREATE SCHEMA ${INFRA_TEST_SCHEMA}`);
-    const s3 = `http://localhost:${root.S3_API_PORT ?? '9000'}`;
+    // Không gọi S3 trong file này (service không tạo bucket lúc khởi động, decisions/0016): giá trị giả
     Object.assign(process.env, {
-      S3_ENDPOINT: s3,
-      S3_PUBLIC_ENDPOINT: s3,
-      S3_ACCESS_KEY: root.S3_ACCESS_KEY,
-      S3_SECRET_KEY: root.S3_SECRET_KEY,
+      S3_ENDPOINT: 'http://s3.invalid',
+      S3_REGION: 'auto',
+      S3_ACCESS_KEY: 'khong-dung',
+      S3_SECRET_KEY: 'khong-dung',
       S3_BUCKETS: BUCKET,
     });
     const { createTestApp } = await import('./helpers/create-test-app');
     t = await createTestApp();
     ds = t.app.get(DataSource);
-    await t.app.get(StorageService).bucketsReady;
     await ds.runMigrations();
     const noop = () => undefined;
     (ds as unknown as { logger: unknown }).logger = {

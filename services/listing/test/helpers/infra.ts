@@ -32,3 +32,27 @@ export function readRootEnv(): Record<string, string | undefined> {
   }
   return parseEnv(readFileSync(path, 'utf8'));
 }
+
+/** Cấu hình S3 thật cho test hạ tầng, lấy từ .env gốc (R2, ADR-0016). */
+export interface S3TestEnv {
+  endpoint: string;
+  region: string;
+  accessKey: string;
+  secretKey: string;
+  /** Bucket CÓ SẴN dành cho test (R2: `infra-test`); test chỉ ghi và xóa key của chính nó. */
+  bucket: string;
+}
+
+/**
+ * Lấy cấu hình S3 cho test từ .env gốc. Thiếu một trong `S3_ENDPOINT`, `S3_ACCESS_KEY`,
+ * `S3_SECRET_KEY`, `S3_TEST_BUCKET` → `null`: test S3 bỏ qua (không fail) khi máy chưa có khóa R2.
+ */
+export function s3TestEnv(root: Record<string, string | undefined>): S3TestEnv | null {
+  const pick = (name: string): string | undefined => root[name]?.trim() || undefined;
+  const endpoint = pick('S3_ENDPOINT');
+  const accessKey = pick('S3_ACCESS_KEY');
+  const secretKey = pick('S3_SECRET_KEY');
+  const bucket = pick('S3_TEST_BUCKET');
+  if (!endpoint || !accessKey || !secretKey || !bucket) return null;
+  return { endpoint, region: pick('S3_REGION') ?? 'auto', accessKey, secretKey, bucket };
+}

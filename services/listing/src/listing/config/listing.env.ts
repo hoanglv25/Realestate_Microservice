@@ -16,7 +16,7 @@ export const listingRequiredSchema = Joi.object({
   S3_ENDPOINT: Joi.string().required(),
   S3_ACCESS_KEY: Joi.string().required(),
   S3_SECRET_KEY: Joi.string().required(),
-  // Bucket phải có `listing-images`: service tự tạo lúc khởi động và presign vào đó
+  // Bucket phải có `listing-images` (tạo sẵn trên R2, service không tự tạo) và presign vào đó
   S3_BUCKETS: Joi.string()
     .required()
     .custom((value: string, helpers) =>

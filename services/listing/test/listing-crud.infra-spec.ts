@@ -4,13 +4,14 @@ import { Client } from 'pg';
 import { DataSource } from 'typeorm';
 import { StorageService } from '../src/storage/storage.service';
 import type { TestApp } from './helpers/create-test-app';
-import { INFRA_TEST_SCHEMA, readRootEnv } from './helpers/infra';
+import { INFRA_TEST_SCHEMA, readRootEnv, s3TestEnv } from './helpers/infra';
 
 /**
- * Sản phẩm, duyệt, ảnh (`RE.LISTING` route 1–10, 12) với Postgres + PostGIS + S3 (Silo) THẬT
- * (pnpm infra:up, rồi pnpm test:infra). Schema Postgres riêng (search_path có `public` để thấy kiểu
- * `geography`), khóa RSA tạo tạm, ảnh thử xóa ở cuối. Test thiết kế 1, 2, 3, 12–17
- * (`Component_Class_Design.md §3`).
+ * Sản phẩm, duyệt, ảnh (`RE.LISTING` route 1–10, 12) với Postgres + PostGIS THẬT (pnpm infra:up, rồi
+ * pnpm test:infra) và S3 THẬT trên Cloudflare R2, bucket `listing-images` (decisions/0016). Phần ảnh
+ * và đo số truy vấn cần S3: `.env` gốc thiếu `S3_*`/`S3_TEST_BUCKET` thì hai phần đó bị bỏ qua.
+ * Schema Postgres riêng (search_path có `public` để thấy kiểu `geography`), khóa RSA tạo tạm, ảnh
+ * thử xóa ở cuối. Test thiết kế 1, 2, 3, 12–17 (`Component_Class_Design.md §3`).
  */
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -19,9 +20,14 @@ const { privateKey, publicKey } = generateKeyPairSync('rsa', {
 });
 const ISSUER = 'realestate-identity-test';
 const BUCKET = 'listing-images';
+/** Cấu hình R2 từ .env gốc; `null` → bỏ qua test cần S3. */
+const S3 = s3TestEnv(readRootEnv());
+const describeS3 = S3 ? describe : describe.skip;
+const QUERY_COUNT_TITLE =
+  'Số truy vấn mỗi route (non-functional-standards.md §1: ghi ≤ 6, danh sách ≤ 4, chi tiết ≤ 3)';
 const ENV_NAMES = [
   'S3_ENDPOINT',
-  'S3_PUBLIC_ENDPOINT',
+  'S3_REGION',
   'S3_ACCESS_KEY',
   'S3_SECRET_KEY',
   'S3_BUCKETS',
@@ -137,17 +143,16 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     as(owner.token).post(`/api/v1/listings/${id}/images`, { key });
 
   beforeAll(async () => {
-    const root = readRootEnv();
     pg = new Client({ connectionString: process.env.DATABASE_URL });
     await pg.connect();
     await pg.query(`DROP SCHEMA IF EXISTS ${INFRA_TEST_SCHEMA} CASCADE`);
     await pg.query(`CREATE SCHEMA ${INFRA_TEST_SCHEMA}`);
-    const s3 = `http://localhost:${root.S3_API_PORT ?? '9000'}`;
+    // S3 thật (R2) khi .env gốc có cấu hình; không có thì giá trị giả và phần ảnh bị bỏ qua
     Object.assign(process.env, {
-      S3_ENDPOINT: s3,
-      S3_PUBLIC_ENDPOINT: s3,
-      S3_ACCESS_KEY: root.S3_ACCESS_KEY,
-      S3_SECRET_KEY: root.S3_SECRET_KEY,
+      S3_ENDPOINT: S3?.endpoint ?? 'http://s3.invalid',
+      S3_REGION: S3?.region ?? 'auto',
+      S3_ACCESS_KEY: S3?.accessKey ?? 'khong-dung',
+      S3_SECRET_KEY: S3?.secretKey ?? 'khong-dung',
       S3_BUCKETS: BUCKET,
       JWT_PUBLIC_KEY: publicKey,
       JWT_ISSUER: ISSUER,
@@ -156,7 +161,6 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     t = await createTestApp();
     ds = t.app.get(DataSource);
     storage = t.app.get(StorageService);
-    await storage.bucketsReady;
     await ds.runMigrations();
     const loc = await pg.query<{ cid: string; city: string; did: string; district: string }>(
       `SELECT c.id AS cid, c.name AS city, d.id AS did, d.name AS district
@@ -500,7 +504,7 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     });
   });
 
-  describe('Test 12 (và 13, 16, 17): ảnh', () => {
+  describeS3('Test 12 (và 13, 16, 17): ảnh', () => {
     it('luồng đầy đủ: upload-url → PUT lên S3 → xác nhận 201 → chi tiết có URL xem được', async () => {
       const id = await newListing(landlordA, {}, true);
       const key = await putImage(landlordA, id);
@@ -679,7 +683,7 @@ describe('Sản phẩm, duyệt, ảnh với hạ tầng thật', () => {
     });
   });
 
-  describe('Số truy vấn mỗi route (non-functional-standards.md §1: ghi ≤ 6, danh sách ≤ 4, chi tiết ≤ 3)', () => {
+  describeS3(QUERY_COUNT_TITLE, () => {
     it('đo từng route', async () => {
       const owner = as(landlordA.token);
       const counts: Record<string, number> = {};
