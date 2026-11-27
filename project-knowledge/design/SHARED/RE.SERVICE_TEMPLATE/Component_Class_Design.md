@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/_template-nest/src/` |
 | **Quy ước** | `standards/coding-convention.md`, `standards/reliability-standard.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-19 — v2.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v2.2 |
 
 ## 1. Cấu trúc
 
@@ -27,7 +27,7 @@ src/
 ├─ database/                  # DatabaseModule, data-source.ts, transformers.ts, migrations/
 ├─ redis/                     # RedisModule, RedisService
 ├─ messaging/                 # xem RE.MESSAGING
-├─ storage/                   # StorageService (S3: tạo bucket, presign PUT/GET, putObject)
+├─ storage/                   # StorageService (S3: health check, presign PUT/GET, put/head/delete; bucket tạo sẵn)
 ├─ example/                   # MẪU — xóa khi tạo service thật
 └─ scripts/export-openapi.ts
 test/                         # *.e2e-spec.ts, *.infra-spec.ts, helpers/ (createTestApp, upstream giả, contracts: expectEventMatchesContract, expectResponseMatchesOpenApi)
@@ -103,6 +103,8 @@ Làm theo `services/_template-nest/README.md §1` (PowerShell, robocopy). Việc
 
 `StorageService.headObject(bucket, key)` (v2.1): `HeadObject`, trả `{ contentLength, contentType }`, hoặc `null` khi không có object (S3 `NotFound`/`NoSuchKey`, HTTP 404); lỗi khác ném lại. Dùng để kiểm kích thước và loại file sau khi client tải lên bằng presigned PUT (presigned PUT không giới hạn được kích thước).
 
+`StorageService` không tạo bucket (v2.2, ADR-0016): bucket trong `S3_BUCKETS` phải có sẵn trên kho (tạo tay trên dashboard R2); service khởi động không gửi lệnh S3 nào. `S3_BUCKETS` chỉ dùng cho health check `s3` (`HeadBucket` bucket đầu, rỗng thì `ListBuckets`) và để service kiểm biến bắt buộc. Token chỉ cần quyền đọc/ghi object, không cần quyền tạo bucket.
+
 `createUuidParamPipe(field = 'id')` (`common/errors/uuid-param.pipe.ts`, v1.3, phạm vi v2.0): pipe kiểm tham số đường dẫn là UUID, lỗi trả `400 VALIDATION_FAILED`, message "<field> phải là UUID", `details: [{ field, errors }]`, đúng hợp đồng `contracts/openapi/*-internal.v1.yaml`. Dùng cho **mọi** tham số đường dẫn kiểu UUID, công khai và nội bộ (C19, 2026-11-19). Không dùng `new ParseUUIDPipe()` trần (trả `BAD_REQUEST`); luật ESLint `no-restricted-imports` ở `eslint.config.mjs` gốc chặn import `ParseUUIDPipe` trong `services/*/src` (bắt cả `new ParseUUIDPipe()` lẫn truyền class), trừ chính `uuid-param.pipe.ts`.
 
 `expectResponseMatchesOpenApi(spec, method, path, status, body)` (`test/helpers/contracts.ts`, v1.3): kiểm body response thật khớp schema của một response trong `contracts/openapi/<spec>` (bắt trường thừa khi `additionalProperties: false`, thiếu trường, sai format). Dùng gói `yaml` (devDependency). Chỉ dùng trong test.
@@ -125,5 +127,5 @@ Làm theo `services/_template-nest/README.md §1` (PowerShell, robocopy). Việc
 | `test/health.e2e-spec.ts` | `200`/`503` theo phụ thuộc |
 | `test/auth.e2e-spec.ts` | Guard JWT, vai trò (chạy qua `JwtTokenVerifier`, kết quả không đổi) |
 | `test/messaging.infra-spec.ts` | Outbox, inbox, DLQ với RabbitMQ thật |
-| `src/storage/storage.service.spec.ts` | `headObject`: có object → `{ contentLength, contentType }`; `NotFound`/`NoSuchKey` → `null`; lỗi khác ném lại (v2.1) |
-| `test/storage.infra-spec.ts` | Tạo bucket, presign, `headObject` với S3 thật (v2.1) |
+| `src/storage/storage.service.spec.ts` | `headObject`: có object → `{ contentLength, contentType }`; `NotFound`/`NoSuchKey` → `null`; lỗi khác ném lại (v2.1). Khởi động app có `S3_BUCKETS` không gửi lệnh S3 nào (v2.2) |
+| `test/storage.infra-spec.ts` | Health `s3`, presign PUT/GET, `headObject` với S3 thật, bucket có sẵn `S3_TEST_BUCKET`, chỉ xóa key của lượt chạy. `.env` gốc thiếu `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` hoặc `S3_TEST_BUCKET` → bỏ qua cả file (v2.2) |

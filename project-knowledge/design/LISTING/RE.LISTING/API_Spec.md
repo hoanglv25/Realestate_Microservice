@@ -7,7 +7,7 @@
 | **Quy tắc** | BR-03, BR-05, BR-06, BR-14 |
 | **Quyết định** | ADR-0010 (gộp sản phẩm vào listing), ADR-0007 (S3) |
 | **CSDL** | `listing_db` / `listing_user` (PostGIS, pgcrypto); S3 bucket `listing-images` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.5 (đề xuất, chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.6 (phần v1.5 chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
 
 > Báo cáo v2 Bảng 3.8 chỉ liệt kê **thao tác**. Đường dẫn chốt 2026-11-12 (A6); tên trường, giá trị chốt 2026-11-16.
 

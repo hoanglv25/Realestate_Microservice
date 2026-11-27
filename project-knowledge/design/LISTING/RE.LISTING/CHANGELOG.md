@@ -2,6 +2,33 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v1.6] — 2026-11-26
+
+- **type:** MINOR
+- **author:** Claude (T1.4, A duyệt kế hoạch 2026-11-26)
+- **summary:** Kho ảnh tin đăng là Cloudflare R2 thay Silo (ADR-0016); chỉ đổi nhãn sơ đồ, luồng không đổi.
+
+### Thay đổi
+
+**1.** Đổi nhãn bên tham gia S3 trong sơ đồ tải ảnh.
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `Processing_Flow.md` sơ đồ luồng ảnh | Sửa |
+
+- **Cũ:** `participant S3 as S3 (Silo)`.
+- **Mới:** `participant S3 as S3 (Cloudflare R2)`.
+- **Lý do:** ADR-0016 (A chốt C26 2026-11-26) thay Silo bằng R2 cho dev và production. Bucket `listing-images` tạo sẵn trên R2; service không còn tự tạo bucket (`RE.SERVICE_TEMPLATE` v2.2). Presigned PUT/GET, `HeadObject`, `deleteObject` giữ nguyên.
+
+### File design đã sửa
+
+- `Processing_Flow.md` (nhãn sơ đồ)
+- Header 3 file: v1.5 → v1.6 (`API_Spec.md`, `Component_Class_Design.md` chỉ đổi số phiên bản)
+
+### Ảnh hưởng
+
+- Không đổi API, mã lỗi, bảng hay hợp đồng. Test hạ tầng ảnh (test 12, 13, 16, 17) chạy trên R2 khi `.env` gốc có cấu hình S3 (T1.4).
+
 ## [v1.5] — 2026-11-26
 
 - **type:** MAJOR

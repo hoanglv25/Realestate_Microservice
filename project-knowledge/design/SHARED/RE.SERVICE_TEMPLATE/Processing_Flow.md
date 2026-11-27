@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Vòng đời request, gọi service khác, idempotency, lỗi về client |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, `standards/reliability-standard.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-19 — v2.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v2.2 |
 
 ## 1. Vòng đời một request
 
@@ -71,7 +71,7 @@ Không gọi khi đang giữ transaction (`coding-convention.md §4`).
 
 1. `env.bootstrap.ts` nạp `.env`; `env.validation.ts` kiểm, thiếu biến → in danh sách, thoát mã 1.
 2. Module tùy chọn bật theo env có mặt.
-3. `StorageModule` tạo bucket trong `S3_BUCKETS`; S3 chưa sẵn sàng → thử lại nền.
+3. `StorageModule` không gọi S3 lúc khởi động; bucket trong `S3_BUCKETS` tạo sẵn (v2.2, ADR-0016). Kết nối kiểm qua health `s3`.
 4. SIGTERM → `ShutdownLoggerService` ghi trình tự; đóng kết nối gọn.
 
 ## 5. Đã chốt

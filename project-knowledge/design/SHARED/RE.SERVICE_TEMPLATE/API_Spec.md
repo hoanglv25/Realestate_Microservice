@@ -7,7 +7,7 @@
 | **Quy tắc** | Không có `BR-xx`; hiện thực NFR02, NFR03, NFR06 |
 | **Quyết định** | ADR-0011, ADR-0013, ADR-0014 |
 | **CSDL** | Tùy chọn: bật khi có `DATABASE_URL` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-19 — v2.1 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v2.2 |
 
 > Mô tả hợp đồng mà template **đã có trong code**. Nguồn: `services/_template-nest/README.md`. Mọi service kế thừa nguyên các hợp đồng này.
 
@@ -91,7 +91,7 @@ delete<T>(url, options?): Promise<T>
 | `DATABASE_URL` | tắt | Bật TypeORM + health `db` |
 | `REDIS_URL` | tắt | Bật Redis + health `redis` |
 | `RABBITMQ_*`, `OUTBOX_*` | | Xem `RE.MESSAGING/API_Spec.md §5` |
-| `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKETS`, `S3_REGION`, `S3_FORCE_PATH_STYLE`, `S3_PRESIGN_TTL_SECONDS` | tắt / `us-east-1` / `true` / `900` | Bật `StorageModule` + health `s3` |
+| `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKETS`, `S3_REGION`, `S3_FORCE_PATH_STYLE`, `S3_PRESIGN_TTL_SECONDS` | tắt / `us-east-1` / `true` / `900` | Bật `StorageModule` + health `s3`. Bucket trong `S3_BUCKETS` phải có sẵn (v2.2). Cloudflare R2 (ADR-0016): `S3_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, `S3_REGION=auto`; `S3_PUBLIC_ENDPOINT` chỉ đặt khi host ký URL khác host service gọi |
 | `JWT_PUBLIC_KEY`, `JWT_PUBLIC_KEY_PATH`, `JWT_SECRET`, `JWT_ISSUER` | tắt | Thứ tự ưu tiên: PEM → file → HS256 (chỉ dev) |
 
 ## 6. Đã chốt 2026-11-16
