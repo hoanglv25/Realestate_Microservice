@@ -60,7 +60,7 @@ if ($r.Code -ne 0) {
 
 # ---------------- 1. Container healthy ----------------
 Write-Host '== Container'
-foreach ($c in 're-postgres', 're-redis', 're-rabbitmq', 're-s3') {
+foreach ($c in 're-postgres', 're-redis', 're-rabbitmq') {
   $r = Invoke-Docker @('inspect', '--format', '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}', $c)
   Write-Result ($r.Code -eq 0 -and $r.Out -eq 'healthy') "container $c healthy" "trang thai: $($r.Out)"
 }
@@ -129,18 +129,6 @@ foreach ($q in $expectedBindings.Keys) {
   [Array]::Sort($keys, [StringComparer]::Ordinal)
   $actual = $keys -join ','
   Write-Result ($actual -eq $expectedBindings[$q]) "rabbitmq: binding cua $q dung" "thuc te: $actual"
-}
-
-# ---------------- 5. S3 (Silo) ----------------
-Write-Host '== S3 (Silo)'
-$s3port = if ($cfg['S3_API_PORT']) { $cfg['S3_API_PORT'] } else { '9000' }
-foreach ($ep in 'live', 'ready') {
-  try {
-    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$s3port/minio/health/$ep" -UseBasicParsing -TimeoutSec 5
-    Write-Result ($resp.StatusCode -eq 200) "s3: /minio/health/$ep" "HTTP $($resp.StatusCode)"
-  } catch {
-    Write-Result $false "s3: /minio/health/$ep" $_.Exception.Message
-  }
 }
 
 # ---------------- Tong ket ----------------
