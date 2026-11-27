@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Quản lý sản phẩm, tải ảnh, tìm kiếm, giữ chỗ và đổi trạng thái theo đơn |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, ADR-0010 |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.5 (đề xuất, chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.6 (phần v1.5 chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
 
 ## 1. Vòng đời trạng thái BĐS
 
@@ -26,7 +26,7 @@ stateDiagram-v2
 sequenceDiagram
     participant C as Trình duyệt
     participant L as listing
-    participant S3 as S3 (Silo)
+    participant S3 as S3 (Cloudflare R2)
     C->>L: POST /listings/:id/images/upload-url { contentType }
     L->>L: kiểm chủ sở hữu, loại file, key = listings/{id}/{uuid}.{ext}
     L-->>C: presigned PUT (Content-Type đã ký)

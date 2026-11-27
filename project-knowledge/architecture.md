@@ -33,7 +33,7 @@ flowchart LR
     ID --- DB1[(identity_db)]
     ID --- R[(Redis)]
     LI --- DB2[(listing_db PostGIS)]
-    LI --- S3[(S3 Silo)]
+    LI --- S3[(S3 Cloudflare R2)]
     RE --- DB3[(rental_db)]
     RE --- R
     PA --- DB4[(payment_db)]
@@ -84,7 +84,7 @@ Listing dừng thì không đặt cọc được: cái giá của một lời g�
 | Sự kiện | RabbitMQ 3.13, amqplib |
 | Thanh toán | payOS (link, VietQR, webhook), SDK `@payos/node` — chốt 2026-11-16; T3.1 (2026-11-21) ghim `2.0.5`, tắt retry khi tạo link bằng `maxRetries: 0` cho từng lệnh (hủy giữ retry mặc định 2), timeout `PAYOS_TIMEOUT_MS` |
 | Xác thực | JWT RS256, argon2id |
-| Lưu tệp | Silo, API S3, AWS SDK (ADR-0007) |
+| Lưu tệp | Cloudflare R2 qua API S3, AWS SDK; dev và production chung tài khoản tới go-live (ADR-0016) |
 | Thời gian thực | Socket.IO: `@nestjs/websockets`, `@nestjs/platform-socket.io` — chốt 2026-11-16 |
 | Email | SMTP qua nodemailer ở identity (OTP, đặt lại mật khẩu); Mailpit khi dev |
 | Đăng nhập Google | Google Sign-In ở Next.js; identity kiểm ID token bằng `google-auth-library` (chốt 2026-11-13) |

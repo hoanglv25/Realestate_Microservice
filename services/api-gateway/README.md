@@ -4,7 +4,7 @@ Template service NestJS dùng chung cho monorepo `Realestate_Microservice`. Mọ
 identity, listing, rental, payment, notification, assistant) **copy từ đây**, nên template đã có sẵn
 các quy ước bắt buộc: log JSON, correlation ID, định dạng lỗi thống nhất, health check, JWT/roles,
 idempotency, HTTP client gọi service khác, publish/consume event qua RabbitMQ (outbox, inbox, DLQ),
-object storage S3 (tự tạo bucket, presigned URL), Swagger và Dockerfile.
+object storage S3 (presigned URL, bucket tạo sẵn), Swagger và Dockerfile.
 
 - NestJS **11.2.8** (CommonJS), TypeScript strict, Node 22 LTS, pnpm workspace.
 - Chạy được ngay, **không cần DB, Redis, RabbitMQ hay S3**: `DATABASE_URL`/`REDIS_URL`/`RABBITMQ_URL`/
@@ -144,7 +144,7 @@ src/
 ├── database/               # TypeORM (TÙY CHỌN): module, entity mẫu, migration, data-source CLI
 ├── redis/                  # ioredis (TÙY CHỌN)
 ├── messaging/              # RabbitMQ (TÙY CHỌN, cần DB): outbox, relay, consumer + inbox
-├── storage/                # S3 (TÙY CHỌN): StorageService, tự tạo bucket, presigned URL
+├── storage/                # S3 (TÙY CHỌN): StorageService, presigned URL (bucket tạo sẵn)
 ├── example/                # module MẪU: xóa khi tạo service thật
 └── scripts/export-openapi.ts
 test/                       # test e2e + helper (createTestApp, upstream giả, expectEventMatchesContract)
@@ -250,8 +250,10 @@ export class PaymentEventsHandler implements OnModuleInit {
 
 ### Object storage (S3)
 
-Bật bằng `S3_ENDPOINT` + `S3_ACCESS_KEY` + `S3_SECRET_KEY`. Bucket trong `S3_BUCKETS` được tạo lúc khởi động
-(chạy lại không lỗi, S3 chưa sẵn sàng thì thử lại nền), theo `project-knowledge/decisions/0007-object-storage-silo-api-s3.md`.
+Bật bằng `S3_ENDPOINT` + `S3_ACCESS_KEY` + `S3_SECRET_KEY`. Kho là Cloudflare R2
+(`project-knowledge/decisions/0016-object-storage-cloudflare-r2-bo-silo.md`). Service **không tạo bucket**: bucket trong
+`S3_BUCKETS` phải có sẵn (tạo tay trên dashboard R2); khởi động không gửi lệnh S3 nào, health `s3` kiểm bucket đầu tiên.
+Gateway không dùng S3.
 
 Upload ảnh từ trình duyệt nên đi thẳng lên S3, không qua service:
 
@@ -274,36 +276,36 @@ const viewUrl = await this.storage.presignGet('listing-images', key);
 Validate khi khởi động (`src/config/env.validation.ts`): thiếu biến bắt buộc hoặc sai định dạng thì service
 **dừng ngay** và in rõ biến nào sai.
 
-| Biến                      | Mặc định        | Ý nghĩa                                                                                                            |
-| ------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `SERVICE_NAME`            | **không**       | Tên service (log, `/health`, Swagger). **Bắt buộc.**                                                               |
-| `NODE_ENV`                | `development`   | `development` \| `test` \| `production`                                                                            |
-| `PORT`                    | `3000`          | Cổng HTTP.                                                                                                         |
-| `LOG_LEVEL`, `LOG_PRETTY` | `info`, `false` | Mức log; `LOG_PRETTY=true` bật pino-pretty (chỉ dev).                                                              |
-| `HTTP_TIMEOUT_MS`         | `3000`          | Timeout gọi service khác. `.env.example` gốc repo cũng `3000` (A2).                                                |
-| `HTTP_MAX_RETRIES`        | `2`             | Số lần thử lại tối đa (chỉ GET/lệnh idempotent).                                                                   |
-| `SWAGGER_ENABLED`         | `true`          | Bật `/api/docs`. Ảnh Docker mặc định `false`.                                                                      |
-| `IDEMPOTENCY_TTL_SECONDS` | `86400`         | Thời gian lưu kết quả `Idempotency-Key`.                                                                           |
-| `DATABASE_URL`            | tắt             | Bật TypeORM + health `db`. Ví dụ laptop: `postgres://identity_user:change_me_identity@localhost:5433/identity_db`. |
-| `REDIS_URL`               | tắt             | Bật Redis + health `redis`. Ví dụ: `redis://:change_me_redis@localhost:6379`.                                      |
-| `RABBITMQ_URL`            | tắt             | Bật MessagingModule + health `rabbitmq`. **Bắt buộc kèm `DATABASE_URL`**. vhost `/` phải viết `%2F`.               |
-| `RABBITMQ_EXCHANGE`       | `domain.events` | Exchange publish event.                                                                                            |
-| `RABBITMQ_QUEUE`          | tắt             | Queue service đọc (có trong `infra/rabbitmq/definitions.json`). Bỏ trống = chỉ publish.                            |
-| `RABBITMQ_PREFETCH`       | `10`            | Số message xử lý song song tối đa.                                                                                 |
-| `RABBITMQ_MAX_RETRIES`    | `3`             | Số lần thử lại khi handler lỗi, sau đó message vào `<queue>.dlq`.                                                  |
-| `OUTBOX_POLL_INTERVAL_MS` | `1000`          | Chu kỳ quét outbox để publish.                                                                                     |
-| `OUTBOX_BATCH_SIZE`       | `50`            | Số event tối đa mỗi lần quét.                                                                                      |
-| `OUTBOX_RELAY_ENABLED`    | `true`          | `false`: event vẫn ghi vào outbox nhưng relay không tự gửi (dùng khi test).                                        |
-| `S3_ENDPOINT`             | tắt             | Bật StorageModule + health `s3`. Bắt buộc kèm `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Laptop: `http://localhost:9000`.   |
-| `S3_PUBLIC_ENDPOINT`      | = `S3_ENDPOINT` | Host ghi vào presigned URL. Service chạy trong Docker (`http://s3:9000`) thì đặt `http://localhost:9000`.          |
-| `S3_BUCKETS`              | trống           | Bucket tự tạo lúc khởi động, cách nhau dấu phẩy, ví dụ `listing-images`.                                           |
-| `S3_REGION`               | `us-east-1`     | Region giả lập cho AWS SDK.                                                                                        |
-| `S3_FORCE_PATH_STYLE`     | `true`          | Bắt buộc `true` với S3 tự dựng (Silo).                                                                             |
-| `S3_PRESIGN_TTL_SECONDS`  | `900`           | Thời hạn presigned URL.                                                                                            |
-| `JWT_PUBLIC_KEY`          | tắt             | Khóa công khai PEM (xuống dòng viết `\n`), RS256. Ưu tiên 1.                                                       |
-| `JWT_PUBLIC_KEY_PATH`     | tắt             | Đường dẫn file khóa công khai, RS256. Ưu tiên 2.                                                                   |
-| `JWT_SECRET`              | tắt             | Bí mật HS256 (≥16 ký tự, **chỉ dev**). Ưu tiên 3.                                                                  |
-| `JWT_ISSUER`              | tắt             | Nếu đặt, token phải có đúng `iss`.                                                                                 |
+| Biến                      | Mặc định        | Ý nghĩa                                                                                                                              |
+| ------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `SERVICE_NAME`            | **không**       | Tên service (log, `/health`, Swagger). **Bắt buộc.**                                                                                 |
+| `NODE_ENV`                | `development`   | `development` \| `test` \| `production`                                                                                              |
+| `PORT`                    | `3000`          | Cổng HTTP.                                                                                                                           |
+| `LOG_LEVEL`, `LOG_PRETTY` | `info`, `false` | Mức log; `LOG_PRETTY=true` bật pino-pretty (chỉ dev).                                                                                |
+| `HTTP_TIMEOUT_MS`         | `3000`          | Timeout gọi service khác. `.env.example` gốc repo cũng `3000` (A2).                                                                  |
+| `HTTP_MAX_RETRIES`        | `2`             | Số lần thử lại tối đa (chỉ GET/lệnh idempotent).                                                                                     |
+| `SWAGGER_ENABLED`         | `true`          | Bật `/api/docs`. Ảnh Docker mặc định `false`.                                                                                        |
+| `IDEMPOTENCY_TTL_SECONDS` | `86400`         | Thời gian lưu kết quả `Idempotency-Key`.                                                                                             |
+| `DATABASE_URL`            | tắt             | Bật TypeORM + health `db`. Ví dụ laptop: `postgres://identity_user:change_me_identity@localhost:5433/identity_db`.                   |
+| `REDIS_URL`               | tắt             | Bật Redis + health `redis`. Ví dụ: `redis://:change_me_redis@localhost:6379`.                                                        |
+| `RABBITMQ_URL`            | tắt             | Bật MessagingModule + health `rabbitmq`. **Bắt buộc kèm `DATABASE_URL`**. vhost `/` phải viết `%2F`.                                 |
+| `RABBITMQ_EXCHANGE`       | `domain.events` | Exchange publish event.                                                                                                              |
+| `RABBITMQ_QUEUE`          | tắt             | Queue service đọc (có trong `infra/rabbitmq/definitions.json`). Bỏ trống = chỉ publish.                                              |
+| `RABBITMQ_PREFETCH`       | `10`            | Số message xử lý song song tối đa.                                                                                                   |
+| `RABBITMQ_MAX_RETRIES`    | `3`             | Số lần thử lại khi handler lỗi, sau đó message vào `<queue>.dlq`.                                                                    |
+| `OUTBOX_POLL_INTERVAL_MS` | `1000`          | Chu kỳ quét outbox để publish.                                                                                                       |
+| `OUTBOX_BATCH_SIZE`       | `50`            | Số event tối đa mỗi lần quét.                                                                                                        |
+| `OUTBOX_RELAY_ENABLED`    | `true`          | `false`: event vẫn ghi vào outbox nhưng relay không tự gửi (dùng khi test).                                                          |
+| `S3_ENDPOINT`             | tắt             | Bật StorageModule + health `s3`. Bắt buộc kèm `S3_ACCESS_KEY`, `S3_SECRET_KEY`. R2: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`. |
+| `S3_PUBLIC_ENDPOINT`      | = `S3_ENDPOINT` | Host ghi vào presigned URL, chỉ đặt khi khác `S3_ENDPOINT`. R2: để trống.                                                            |
+| `S3_BUCKETS`              | trống           | Bucket có sẵn, cách nhau dấu phẩy, ví dụ `listing-images`. Bucket đầu cho health check.                                              |
+| `S3_REGION`               | `us-east-1`     | Region cho AWS SDK. R2: `auto`.                                                                                                      |
+| `S3_FORCE_PATH_STYLE`     | `true`          | Dạng `endpoint/bucket`; R2 chạy được với `true`.                                                                                     |
+| `S3_PRESIGN_TTL_SECONDS`  | `900`           | Thời hạn presigned URL.                                                                                                              |
+| `JWT_PUBLIC_KEY`          | tắt             | Khóa công khai PEM (xuống dòng viết `\n`), RS256. Ưu tiên 1.                                                                         |
+| `JWT_PUBLIC_KEY_PATH`     | tắt             | Đường dẫn file khóa công khai, RS256. Ưu tiên 2.                                                                                     |
+| `JWT_SECRET`              | tắt             | Bí mật HS256 (≥16 ký tự, **chỉ dev**). Ưu tiên 3.                                                                                    |
+| `JWT_ISSUER`              | tắt             | Nếu đặt, token phải có đúng `iss`.                                                                                                   |
 
 Không cấu hình JWT nào thì mọi route không `@Public()` trả `503 AUTH_NOT_CONFIGURED` (không bao giờ để hở).
 

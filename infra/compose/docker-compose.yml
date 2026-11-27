@@ -6,7 +6,8 @@
 #   docker compose --env-file .env -f infra/compose/docker-compose.yml --profile dev --profile apps up -d --build
 #
 # Profile:
-#   dev  : postgres, redis, rabbitmq (+ rabbitmq-init chay mot lan), s3 (Silo), mailpit
+#   dev  : postgres, redis, rabbitmq (+ rabbitmq-init chay mot lan), mailpit. Object storage la Cloudflare R2
+#          (dich vu ngoai, ADR-0016), khong co container.
 #   demo : dev + elasticsearch + kibana (de do RAM; ELK day du o GD10)
 #   apps : cac service ung dung (identity, api-gateway). Luon chay KEM dev hoac demo.
 #          Truoc khi up: pnpm keys:generate (secrets/jwt-*.pem) va migration cua tung service.
@@ -161,31 +162,9 @@ services:
         && echo 'rabbitmq-init: da nap topology tu definitions.json'
     networks: [realestate-net]
 
-  # Silo (fork cong dong cua MinIO, tuong thich S3) - xem project-knowledge/decisions/0007-object-storage-silo-api-s3.md.
-  # Ghim tag RELEASE da kiem tra bang `docker manifest inspect` + `docker pull`.
-  # Entrypoint cua image tu them ten binary `silo`, nen command chi gom doi so.
-  # Image co san curl nen healthcheck dung endpoint /minio/health/live.
-  s3:
-    <<: *restart
-    image: docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z
-    container_name: re-s3
-    profiles: [dev, demo]
-    command: ['server', '/data', '--console-address', ':9001']
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?thieu MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?thieu MINIO_ROOT_PASSWORD}
-    ports:
-      - '127.0.0.1:${S3_API_PORT:-9000}:9000'
-      - '127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001'
-    volumes:
-      - s3_data:/data
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 10s
-    networks: [realestate-net]
+  # Object storage: Cloudflare R2 (dich vu ngoai, API S3), KHONG chay container - xem
+  # project-knowledge/decisions/0016-object-storage-cloudflare-r2-bo-silo.md. Bucket tao san tren dashboard R2;
+  # listing, payment lay S3_* tu .env.
 
   # Elasticsearch 8.15 single-node, heap 512m, tat security (CHI cho dev/demo local).
   # Khong publish cong ra host: Kibana goi qua network noi bo.
@@ -315,12 +294,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       HTTP_TIMEOUT_MS: ${HTTP_TIMEOUT_MS:-3000}
       DATABASE_URL: postgres://${LISTING_DB_USER:?thieu LISTING_DB_USER}:${LISTING_DB_PASSWORD:?thieu LISTING_DB_PASSWORD}@postgres:5432/${LISTING_DB_NAME:?thieu LISTING_DB_NAME}
-      # Trong Docker thay S3 bang ten service; trinh duyet khong thay s3:9000 nen presigned URL ky voi host cong khai
-      S3_ENDPOINT: http://s3:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:${S3_API_PORT:-9000}
+      # Cloudflare R2 (ADR-0016): service va trinh duyet cung goi mot endpoint cong khai, khong can S3_PUBLIC_ENDPOINT
+      S3_ENDPOINT: ${S3_ENDPOINT:?thieu S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?thieu S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?thieu S3_SECRET_KEY}
-      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_REGION: ${S3_REGION:-auto}
       S3_BUCKETS: ${S3_BUCKET_LISTING_IMAGES:-listing-images}
       # listing chi KIEM token (khoa cong khai), khong ky
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public_key
@@ -332,8 +310,6 @@ services:
     # Khong co `ports:`: chi goi duoc trong mang realestate-net (qua api-gateway)
     depends_on:
       postgres:
-        condition: service_healthy
-      s3:
         condition: service_healthy
     networks: [realestate-net]
 
@@ -412,10 +388,10 @@ services:
       PAYOS_TIMEOUT_MS: ${PAYOS_TIMEOUT_MS:-2500}
       # T3.6 payout: Idempotency-Key (Redis), chung tu chuyen khoan (S3 payment-proofs), goi rental + identity
       REDIS_URL: redis://:${REDIS_PASSWORD:?thieu REDIS_PASSWORD}@redis:6379
-      S3_ENDPOINT: http://s3:9000
+      S3_ENDPOINT: ${S3_ENDPOINT:?thieu S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?thieu S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?thieu S3_SECRET_KEY}
-      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_REGION: ${S3_REGION:-auto}
       S3_BUCKETS: ${S3_BUCKET_PAYMENT_PROOFS:-payment-proofs}
       RECEIPT_MAX_BYTES: ${RECEIPT_MAX_BYTES:-5242880}
       INTERNAL_RENTAL_URL: http://rental:3003
@@ -433,8 +409,6 @@ services:
       rabbitmq-init:
         condition: service_completed_successfully
       redis:
-        condition: service_healthy
-      s3:
         condition: service_healthy
     networks: [realestate-net]
 
@@ -479,7 +453,6 @@ volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
-  s3_data:
   es_data:
 
 # Khoa JWT RS256 sinh bang `pnpm keys:generate` (khong commit, xem .gitignore).

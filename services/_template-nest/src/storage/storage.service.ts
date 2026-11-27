@@ -1,12 +1,6 @@
-import {
-  Injectable,
-  OnApplicationBootstrap,
-  OnApplicationShutdown,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
@@ -18,12 +12,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { PinoLogger } from 'nestjs-pino';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { EnvVars } from '../config/env.validation';
 import { HealthRegistry } from '../health/health.registry';
-
-/** Mã lỗi S3 khi bucket đã tồn tại: coi như tạo thành công (CreateBucket chạy lại không lỗi). */
-const BUCKET_EXISTS = new Set(['BucketAlreadyOwnedByYou', 'BucketAlreadyExists']);
 
 /** Mã lỗi S3 khi object không tồn tại (HeadObject không có body nên thường chỉ có HTTP 404). */
 const NOT_FOUND = new Set(['NotFound', 'NoSuchKey']);
@@ -35,24 +25,21 @@ export interface ObjectHead {
 }
 
 /**
- * Object storage qua API S3 (Silo ở dev, xem docs/adr/ADR-007). Không phụ thuộc gì riêng của
- * MinIO/Silo: đổi sang dịch vụ S3 khác chỉ cần đổi biến S3_*.
+ * Object storage qua API S3 (Cloudflare R2, xem decisions/0016). Không phụ thuộc gì riêng của
+ * nhà cung cấp: đổi sang dịch vụ S3 khác chỉ cần đổi biến S3_*.
  *
- * - Lúc khởi động tự tạo các bucket trong S3_BUCKETS (chạy nền, S3 chưa sẵn sàng thì thử lại,
- *   không chặn service khởi động).
- * - Health check 's3'.
+ * - KHÔNG tạo bucket: bucket trong S3_BUCKETS phải có sẵn (tạo tay trên dashboard). Khởi động
+ *   không gửi lệnh S3 nào; token chỉ cần quyền đọc/ghi object.
+ * - Health check 's3': HeadBucket bucket đầu tiên của S3_BUCKETS (rỗng thì ListBuckets).
  * - Upload từ trình duyệt: cấp presigned PUT URL cho client đẩy file thẳng lên S3, service chỉ lưu key.
  */
 @Injectable()
-export class StorageService implements OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown {
+export class StorageService implements OnModuleInit, OnApplicationShutdown {
   readonly client: S3Client;
   /** Chỉ dùng để KÝ URL (không gọi mạng): host là S3_PUBLIC_ENDPOINT nếu có. */
   private readonly presigner: S3Client;
   private readonly buckets: string[];
   private readonly presignTtl: number;
-  private stopped = false;
-  /** Promise tạo bucket lúc khởi động (test chờ được). */
-  bucketsReady?: Promise<void>;
 
   constructor(
     config: ConfigService<EnvVars, true>,
@@ -89,25 +76,9 @@ export class StorageService implements OnModuleInit, OnApplicationBootstrap, OnA
     });
   }
 
-  onApplicationBootstrap(): void {
-    if (this.buckets.length > 0) this.bucketsReady = this.ensureBucketsWithRetry();
-  }
-
   onApplicationShutdown(): void {
-    this.stopped = true;
     this.client.destroy();
     this.presigner.destroy();
-  }
-
-  /** Tạo bucket nếu chưa có. Chạy lại bao nhiêu lần cũng không lỗi. */
-  async ensureBucket(bucket: string): Promise<void> {
-    try {
-      await this.client.send(new CreateBucketCommand({ Bucket: bucket }));
-      this.logger.info({ bucket }, 'Đã tạo bucket');
-    } catch (err) {
-      if (err instanceof S3ServiceException && BUCKET_EXISTS.has(err.name)) return;
-      throw err;
-    }
   }
 
   async putObject(
@@ -169,21 +140,5 @@ export class StorageService implements OnModuleInit, OnApplicationBootstrap, OnA
       new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
       { expiresIn: expiresInSeconds, signableHeaders: new Set(['content-type']) },
     );
-  }
-
-  private async ensureBucketsWithRetry(): Promise<void> {
-    for (let attempt = 1; !this.stopped; attempt++) {
-      try {
-        for (const bucket of this.buckets) await this.ensureBucket(bucket);
-        return;
-      } catch (err) {
-        if (attempt >= 10) {
-          this.logger.error({ err, buckets: this.buckets }, 'Không tạo được bucket sau 10 lần thử');
-          return;
-        }
-        this.logger.warn({ err, attempt }, 'Chưa tạo được bucket (S3 chưa sẵn sàng?), sẽ thử lại');
-        await sleep(Math.min(500 * attempt, 5000));
-      }
-    }
   }
 }

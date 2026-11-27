@@ -29,7 +29,7 @@ import { StorageModule } from './storage/storage.module';
  *   DATABASE_URL -> DatabaseModule (TypeORM + PostgreSQL)
  *   REDIS_URL    -> RedisModule (ioredis)
  *   RABBITMQ_URL -> MessagingModule (outbox, inbox, consumer; bắt buộc kèm DATABASE_URL)
- *   S3_ENDPOINT  -> StorageModule (S3: tự tạo bucket, presigned URL)
+ *   S3_ENDPOINT  -> StorageModule (S3: presigned URL; bucket tạo sẵn, decisions/0016)
  * api-gateway: GatewayModule (định tuyến, kiểm quyền mức tuyến, rate limit, proxy) luôn bật, không DB.
  * Health check (/health) tự thêm `db`/`redis`/`rabbitmq`/`s3` vào `checks` khi module tương ứng được bật.
  *

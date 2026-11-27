@@ -3,7 +3,7 @@ import { StorageService } from './storage.service';
 
 /**
  * TÙY CHỌN: chỉ được nạp khi có S3_ENDPOINT (bắt buộc kèm S3_ACCESS_KEY, S3_SECRET_KEY),
- * xem app.module.ts. Bucket cần tạo khai báo ở S3_BUCKETS.
+ * xem app.module.ts. Bucket có sẵn khai báo ở S3_BUCKETS (service không tự tạo, decisions/0016).
  */
 @Global()
 @Module({

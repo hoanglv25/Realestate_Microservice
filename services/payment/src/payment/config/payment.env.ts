@@ -27,7 +27,7 @@ export const paymentRequiredSchema = Joi.object({
   S3_ENDPOINT: Joi.string().required(),
   S3_ACCESS_KEY: Joi.string().required(),
   S3_SECRET_KEY: Joi.string().required(),
-  // Phải có `payment-proofs`: service tự tạo lúc khởi động và lưu chứng từ vào đó
+  // Phải có `payment-proofs` (tạo sẵn trên R2, service không tự tạo): lưu chứng từ vào đó
   S3_BUCKETS: Joi.string()
     .required()
     .custom((value: string, helpers) =>

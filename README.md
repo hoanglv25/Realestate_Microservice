@@ -78,7 +78,7 @@ Các lệnh dưới đây là script trong `package.json`, đã bọc sẵn `--e
 `-f infra/compose/docker-compose.yml`:
 
 ```powershell
-pnpm infra:up       # profile dev: Postgres, Redis, RabbitMQ, S3 (Silo)
+pnpm infra:up       # profile dev: Postgres, Redis, RabbitMQ, Mailpit (S3 là Cloudflare R2, không có container)
 pnpm infra:demo     # profile demo: dev + Elasticsearch + Kibana (http://127.0.0.1:5601)
 pnpm infra:check    # kiểm tra toàn bộ hạ tầng, in OK/FAIL từng dòng (thoát 0 nếu tất cả OK)
 pnpm infra:logs     # theo dõi log
@@ -92,8 +92,8 @@ Kiểm tra bằng bash (Git Bash, WSL, Linux, macOS): `bash infra/scripts/check-
 `rabbitmq-init` là tác vụ chạy một lần nên trạng thái đúng của nó là `Exited (0)`, không phải
 `healthy`. Elasticsearch và Kibana được kiểm tra khi đang chạy, ngược lại script in `SKIP`.
 
-**Reset toàn bộ dữ liệu dev** (xóa mọi volume của dự án: Postgres, Redis, RabbitMQ, S3,
-Elasticsearch; không thể hoàn tác). Các script init DB và topology RabbitMQ sẽ chạy lại:
+**Reset toàn bộ dữ liệu dev** (xóa mọi volume của dự án: Postgres, Redis, RabbitMQ,
+Elasticsearch; không thể hoàn tác; tệp trên R2 không bị xóa). Các script init DB và topology RabbitMQ sẽ chạy lại:
 
 ```powershell
 docker compose --env-file .env -f infra/compose/docker-compose.yml --profile demo down -v
@@ -102,18 +102,18 @@ pnpm infra:check
 ```
 
 Chỉ reset riêng một thành phần: `pnpm infra:down` rồi `docker volume rm realestate_<tên>_data`
-(`postgres`, `redis`, `rabbitmq`, `s3`, `es`).
+(`postgres`, `redis`, `rabbitmq`, `es`). Máy còn volume `realestate_s3_data` của Silo cũ thì xóa được: `docker volume rm realestate_s3_data`.
 
 ### Cổng kết nối: laptop và trong Docker
 
 Hạ tầng chỉ publish cổng ra `127.0.0.1`. Có hai cách kết nối, đừng nhầm lẫn:
 
-| Thành phần | Tiến trình chạy trên laptop        | Service chạy trong Docker |
-| ---------- | ---------------------------------- | ------------------------- |
-| Postgres   | `localhost:5433` (`POSTGRES_PORT`) | `postgres:5432`           |
-| Redis      | `localhost:6379`                   | `redis:6379`              |
-| RabbitMQ   | `localhost:5672` (UI `15672`)      | `rabbitmq:5672`           |
-| S3 (Silo)  | `localhost:9000` (console `9001`)  | `s3:9000`                 |
+| Thành phần | Tiến trình chạy trên laptop        | Service chạy trong Docker  |
+| ---------- | ---------------------------------- | -------------------------- |
+| Postgres   | `localhost:5433` (`POSTGRES_PORT`) | `postgres:5432`            |
+| Redis      | `localhost:6379`                   | `redis:6379`               |
+| RabbitMQ   | `localhost:5672` (UI `15672`)      | `rabbitmq:5672`            |
+| S3 (R2)    | `S3_ENDPOINT` trong `.env`         | `S3_ENDPOINT` (giống nhau) |
 
 Postgres dùng cổng **5433** trên laptop vì máy đã cài PostgreSQL trên Windows chiếm 5432.
 Container luôn lắng nghe 5432 bên trong; `POSTGRES_DOCKER_HOST` và `POSTGRES_DOCKER_PORT`
@@ -160,10 +160,18 @@ pnpm infra:up
 
 ### Object storage (S3)
 
-Dev dùng Silo (tương thích S3, xem `project-knowledge/decisions/0007-object-storage-silo-api-s3.md`). Bucket không được tạo
-bằng `mc`/`mcli`: mỗi service tự đảm bảo bucket của mình tồn tại khi khởi động bằng AWS SDK
-(`CreateBucket` chạy lại không lỗi). Template đã có sẵn `StorageModule` làm việc này (biến
-`S3_ENDPOINT`, `S3_BUCKETS`, xem README của template).
+Dev và production dùng **Cloudflare R2** qua API S3 (`project-knowledge/decisions/0016-object-storage-cloudflare-r2-bo-silo.md`),
+không có container. Cần internet và khóa R2:
+
+1. Bucket tạo tay trên dashboard R2 (riêng tư, Standard): `listing-images`, `payment-proofs`, `infra-test`.
+   Service **không tự tạo bucket**; khởi động không gửi lệnh S3 nào, health `s3` kiểm bucket đầu tiên của `S3_BUCKETS`.
+2. Token R2 quyền _Object Read & Write_ chỉ trên các bucket trên (không dùng quyền Admin).
+3. CORS bucket `listing-images`: `AllowedMethods` `GET`, `PUT`, `HEAD`; `AllowedHeaders` `Content-Type`;
+   `AllowedOrigins` gồm origin giao diện (local `http://localhost:3000`, thêm domain production khi deploy).
+4. Điền `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION=auto` vào `.env` gốc (và `.env` của listing,
+   payment khi chạy bằng `pnpm dev`); `S3_TEST_BUCKET=infra-test` để chạy test hạ tầng S3. Khóa thật không commit.
+
+Trước go-live: reset **cùng lúc** database (`listings`, `listing_images`, `transfer_receipts`) và làm rỗng các bucket.
 
 ## Quy ước nhánh và commit
 

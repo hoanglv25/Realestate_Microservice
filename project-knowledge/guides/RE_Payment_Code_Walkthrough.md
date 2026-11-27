@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-25 (T3.6: payout) |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-27 (T1.4: S3 chuyển sang Cloudflare R2) |
 | **Thành phần** | `services/payment/` (cổng 3004); phần chép từ `services/_template-nest/` ghi rõ ở §3.3 |
-| **Task** | `T3.1` (khung, payment order, payOS), `T3.4a` (webhook payOS, ghi nhận tiền vào ví, tiền đến muộn, script webhook giả), `T3.6` (ví trừ tiền, yêu cầu hoàn, lệnh rút, chứng từ, nhật ký quản trị); `implementation/PHASE-3.md` |
-| **Thiết kế** | `design/PAYMENT/RE.PAYMENT/` (v1.3), `design/PAYMENT/RE.PAYOUT/` (v1.3), ADR-0006, ADR-0009 |
+| **Task** | `T3.1` (khung, payment order, payOS), `T3.4a` (webhook payOS, ghi nhận tiền vào ví, tiền đến muộn, script webhook giả), `T3.6` (ví trừ tiền, yêu cầu hoàn, lệnh rút, chứng từ, nhật ký quản trị); `implementation/PHASE-3.md`; `T1.4` (S3 trên R2, `PHASE-1.md`) |
+| **Thiết kế** | `design/PAYMENT/RE.PAYMENT/` (v1.3), `design/PAYMENT/RE.PAYOUT/` (v1.3), ADR-0006, ADR-0009, ADR-0016 (S3 là Cloudflare R2) |
 | **Commit / PR** | T3.1: PR #26 (`feature/T3.1-payment-order`). T3.4a: PR #28 (`feature/T3.4a-payos-webhook`). T3.6: nhánh `feature/T3.6-payout` (A cùng Claude, 2026-11-25) |
 
 ## 1. Luồng chung
@@ -171,7 +171,7 @@ services/payment/
 | `src/database/migrations/1764000000000-add-payout-list-indexes.ts` | **T3.6.** 7 index cho danh sách route 3 (`ix_withdrawal_owner_created`), 4 (`ix_withdrawal_status_created`, `ix_withdrawal_created`), 5 (`ix_refund_status_created`, `ix_refund_created`), 12 (`ix_audit_target_created`, `ix_audit_created`), đúng `RE.PAYOUT §7` | Migration riêng vì bảng đã tạo và merge ở T3.1. Mọi index kết thúc bằng `created_at DESC, id DESC` khớp `ORDER BY` của `PayoutQueryService.page()`; bộ lọc là tùy chọn nên mỗi bảng có thêm index chỉ gồm cột sắp xếp. Có `down` (đã chạy lên → hoàn tác → lên) |
 | `src/config/env.validation.ts` | Thêm `PAYOS_CLIENT_ID/API_KEY/CHECKSUM_KEY` (tùy chọn ở schema chung), `PAYOS_RETURN_URL`, `PAYOS_CANCEL_URL` (http/https), `PAYOS_TIMEOUT_MS` (100–30.000, mặc định 2.500); T3.6: `INTERNAL_RENTAL_URL`, `INTERNAL_IDENTITY_URL` (http/https), `RECEIPT_MAX_BYTES` (1–20 MB, mặc định 5 MB) | Ba khóa và hai URL bắt buộc ở `payment.env.ts` |
 | `src/config/env.bootstrap.ts`, `feature-flags.ts`, `app.module.ts` | Kiểm biến riêng lúc khởi động; `isPaymentEnabled = isDatabaseEnabled()`; nạp `PaymentModule` | `env.bootstrap.spec.ts` sửa như listing: test thiếu biến, đủ biến |
-| `.env.example` (payment, gốc), `infra/compose/docker-compose.yml` | Biến `PAYOS_*`; `RABBITMQ_URL`, `RABBITMQ_EXCHANGE` (T3.4a, chỉ phát, không nghe queue); T3.6: `REDIS_URL`, `S3_*` (`S3_BUCKETS=payment-proofs`), `RECEIPT_MAX_BYTES`, `INTERNAL_RENTAL_URL=http://rental:3003`, `INTERNAL_IDENTITY_URL=http://identity:3001`, `depends_on` thêm `redis`, `s3`. Service `payment` profile `apps`, không publish cổng | Khóa trống: payment báo thiếu và dừng. Payment không `depends_on` rental/identity (gọi lúc chạy, tránh vòng phụ thuộc) |
+| `.env.example` (payment, gốc), `infra/compose/docker-compose.yml` | Biến `PAYOS_*`; `RABBITMQ_URL`, `RABBITMQ_EXCHANGE` (T3.4a, chỉ phát, không nghe queue); T3.6: `REDIS_URL`, `S3_*` (`S3_BUCKETS=payment-proofs`), `RECEIPT_MAX_BYTES`, `INTERNAL_RENTAL_URL=http://rental:3003`, `INTERNAL_IDENTITY_URL=http://identity:3001`, `depends_on` thêm `redis` (T1.4: bỏ `s3`, `S3_*` lấy từ `.env` trỏ R2; bucket `payment-proofs` tạo sẵn). Service `payment` profile `apps`, không publish cổng | Khóa trống: payment báo thiếu và dừng. Payment không `depends_on` rental/identity (gọi lúc chạy, tránh vòng phụ thuộc) |
 | `src/scripts/send-fake-webhook.ts` | `pnpm --filter @realestate/payment webhook:fake -- --order-code <n> --amount <vnd>` (+ `--reference`, `--date`, `--url`, `--bad-signature`, `--failed`): dựng body giống payOS, ký `data` bằng `NodeCryptoProvider` của SDK với `PAYOS_CHECKSUM_KEY`, gửi bằng `node:http(s)` | Công cụ dev (A duyệt dùng `node:http`, không phải lời gọi giữa service). Khóa đọc từ môi trường → `services/payment/.env` → `.env` gốc; không in khóa. Dự phòng khi đường hầm/payOS lỗi lúc demo |
 | `package.json` | `@payos/node@2.0.5` ghim chính xác; lệnh `webhook:fake` (T3.4a) | 2.0.6 mới 9 ngày lúc làm (quy ước ≥ 2 tuần) |
 | `Dockerfile` | Như template, `SERVICE_DIR=services/payment` | `PORT` đặt ở compose |
@@ -262,8 +262,8 @@ services/payment/
 | C22: `GET` chưa hỏi payOS khi order chưa có link | Đối soát tay khi đường hầm webhook rớt phải xem trang payOS | Chờ A chốt (`van-de-can-quyet-dinh.md` C22) |
 | C23: gọi lại tạo order khi chưa có link trả `503` | Nếu payOS đã tạo link dù payment timeout, người thuê không nhận link đó; rental bù trừ, người thuê đặt lại | Chờ A chốt (C23) |
 | Không đối soát chủ động với payOS | Đường hầm rớt lâu hơn thời gian payOS gửi lại thì mất webhook; đối soát tay trên trang payOS | `API_Spec §7` mục 5 (ghi hạn chế báo cáo) |
-| `storage.infra-spec` không chạy được trong môi trường của Claude (không có S3); `payout.infra-spec` dùng S3 giả | Đường S3 thật chỉ kiểm trên máy A | A chạy `test:infra` (2026-11-25: 5 suite, 74 PASS) và luồng compose `t36-demo` |
-| Image Docker không build được trong môi trường của Claude (Docker Hub bị chặn) | Build và chạy compose chỉ trên máy A | Đã build, `/health` đủ `db`, `redis`, `rabbitmq`, `s3` (2026-11-25) |
+| `storage.infra-spec` cần R2 thật (T1.4: bucket `infra-test`, tự bỏ qua khi `.env` gốc thiếu `S3_*`/`S3_TEST_BUCKET`); môi trường của Claude không ra được R2; `payout.infra-spec` dùng S3 giả | Đường S3 thật chỉ kiểm trên máy A | A chạy `test:infra` với khóa R2 (2026-11-25 với Silo: 5 suite, 74 PASS) |
+| Image Docker không build được trong môi trường của Claude (Docker Hub bị chặn) | Build và chạy compose chỉ trên máy A | Đã build, `/health` đủ `db`, `redis`, `rabbitmq`, `s3` (2026-11-25, Silo; T1.4 kiểm lại với R2) |
 | Test DTO và test hạ tầng viết sau code (không thấy RED trước); đã kiểm ngược bằng cách cố ý đảo thứ tự hủy → 3 test hạ tầng đỏ | TDD chưa trọn | Ghi tech-debt |
 | (T3.6) Tệp S3 mồ côi khi DB lỗi sau khi lưu tệp | Tốn chỗ, không sai tiền | Chấp nhận (`Processing_Flow §3`); có thể dọn theo `transfer_receipts` sau |
 | (T3.6) Route 12 chỉ lọc `targetType` dùng `ix_audit_created` rồi lọc dần (không có index riêng `target_type`) | Ít loại đối tượng nên lọc theo thứ tự thời gian vẫn nhanh; `COUNT(*)` vẫn quét các dòng khớp | Chấp nhận; thêm index nếu đo thấy chậm |

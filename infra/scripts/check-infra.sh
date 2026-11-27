@@ -47,7 +47,7 @@ fi
 health() { docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null; }
 
 echo "== Container"
-for c in re-postgres re-redis re-rabbitmq re-s3; do
+for c in re-postgres re-redis re-rabbitmq; do
   st="$(health "$c")"
   report "$(eq "$st" healthy)" "container $c healthy" "trạng thái: ${st:-không tồn tại}"
 done
@@ -111,13 +111,6 @@ while IFS='=' read -r q want; do
 done <<EOF2
 $expected_bindings
 EOF2
-
-echo "== S3 (Silo)"
-port="${S3_API_PORT:-9000}"
-for ep in live ready; do
-  code="$(curl -s -o /dev/null -m 5 -w '%{http_code}' "http://127.0.0.1:${port}/minio/health/${ep}" 2>/dev/null)"
-  report "$(eq "$code" 200)" "s3: /minio/health/$ep" "HTTP ${code:-000}"
-done
 
 echo
 total=$((pass + fail))

@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/listing/src/listing/` |
 | **Quy ước** | `standards/coding-convention.md`, `standards/non-functional-standards.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.5 (đề xuất, chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-26 — v1.6 (phần v1.5 chờ A duyệt: `implementation/van-de-can-quyet-dinh.md` C25) |
 
 ## 1. Cấu trúc
 

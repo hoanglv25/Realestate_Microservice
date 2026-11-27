@@ -2,6 +2,39 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v2.2] — 2026-11-26
+
+- **type:** MINOR
+- **author:** Claude (T1.4, A duyệt kế hoạch 2026-11-26)
+- **summary:** `StorageService` bỏ bước tự tạo bucket lúc khởi động; bucket tạo sẵn trên Cloudflare R2 (ADR-0016, C26).
+
+### Thay đổi
+
+**1.** Bỏ tạo bucket lúc khởi động.
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `Component_Class_Design.md` §1 (cây thư mục), §4 (đoạn `StorageService`), §5 (bảng test); `Processing_Flow.md` §4 bước 3; `API_Spec.md` §5 (bảng biến) | Sửa |
+
+- **Cũ:** `StorageModule` gọi `CreateBucket` cho mọi bucket trong `S3_BUCKETS` lúc khởi động (chạy nền, thử lại 10 lần, `BucketAlreadyOwnedByYou` coi là thành công), theo ADR-0007. `storage.infra-spec.ts` tạo bucket ngẫu nhiên rồi xóa; cần S3 chạy local (`localhost:9000`).
+- **Mới:** service không gửi lệnh S3 nào lúc khởi động; bucket tạo tay trên dashboard. `S3_BUCKETS` chỉ cho health check và kiểm biến. `storage.infra-spec.ts` dùng bucket có sẵn `S3_TEST_BUCKET` (R2: `infra-test`), chỉ xóa key của lượt chạy; `.env` gốc thiếu cấu hình S3 thì bỏ qua cả file. Bảng biến ghi cấu hình R2.
+- **Lý do:** ADR-0016 bỏ Silo, dùng R2 cho dev và production. Token R2 *Object Read & Write* không có quyền `CreateBucket` (`AccessDenied`, đo 2026-11-26): giữ bước này thì mỗi lần khởi động có 10 dòng log warn/error giả. A chốt xóa hẳn thay vì thêm biến tắt (C26). MINOR vì không đổi API, mã lỗi hay hợp đồng; chỉ đổi điều kiện vận hành (bucket phải có sẵn).
+
+### File design đã sửa
+
+- `Component_Class_Design.md` §1, §4, §5
+- `Processing_Flow.md` §4
+- `API_Spec.md` §5
+- Header 3 file: v2.1 → v2.2
+
+### Ảnh hưởng
+
+- `services/_template-nest/src/storage/storage.service.ts`: xóa `ensureBucket`, `ensureBucketsWithRetry`, `bucketsReady`, `onApplicationBootstrap`.
+- `services/_template-nest/test/helpers/infra.ts`: thêm `s3TestEnv`; `test/storage.infra-spec.ts` viết lại.
+- Chép sang api-gateway, identity, listing, payment, rental (gateway chép lại nguyên bản template, có thêm `headObject`, không dùng S3 khi chạy).
+- `infra/compose/docker-compose.yml`: bỏ service `s3`.
+- `contracts/`: không đổi.
+
 ## [v2.1] — 2026-11-19
 
 - **type:** MINOR
