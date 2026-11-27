@@ -107,7 +107,7 @@ Phần 30% của chủ trọ khi người thuê hủy: chủ trọ rút bằng m
 |---|---|---|
 | Giao diện Next.js (repo riêng: https://github.com/dotrungthanhCC01/real-estate) | REST qua gateway cổng 8080, `/api/v1/*`; Socket.IO cho thông báo, tin nhắn | `design/SHARED/RE.GATEWAY/API_Spec.md`, `design/NOTIFICATION/RE.CHAT/API_Spec.md` |
 | payOS | Tạo, hủy, tra cứu link (payment gọi ra); webhook (payOS gọi vào qua gateway) | `design/PAYMENT/RE.PAYMENT/API_Spec.md` |
-| Silo (API S3) | Ảnh sản phẩm, chứng từ chuyển khoản; presigned URL | `design/SHARED/RE.SERVICE_TEMPLATE/`, `RE.LISTING`, `RE.PAYOUT` |
+| Object storage API S3: Cloudflare R2 (ADR-0016, thay Silo 2026-11-26) | Ảnh sản phẩm, chứng từ chuyển khoản; presigned URL | `design/SHARED/RE.SERVICE_TEMPLATE/`, `RE.LISTING`, `RE.PAYOUT` |
 | SMTP (Mailpit khi dev) | identity gửi email OTP, link đặt lại mật khẩu | `design/IDENTITY/RE.IDENTITY/API_Spec.md §1.6–1.7` |
 | Google Sign-In | Next.js lấy ID token; identity kiểm chữ ký | `design/IDENTITY/RE.IDENTITY/API_Spec.md §1.8` |
 

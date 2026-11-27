@@ -63,4 +63,4 @@ Ghi vào báo cáo mục Hạn chế (Báo cáo v2 Bảng 7.1):
 | Phiên tạo trước khi có set `user-families` không bị `revokeAllForUser` thu hồi cho tới lần refresh kế tiếp | Phiên chưa refresh tự hết hạn, tối đa 7 ngày; hệ thống chưa chạy thật. Phiên mới và phiên đã refresh đều có trong set |
 | Số tài khoản ngân hàng mã hóa bằng một khóa, không xoay khóa | Phạm vi đồ án. Hướng: đánh số phiên bản khóa trong dữ liệu mã hóa |
 | Mật khẩu dev nằm trong `.env.example` | Chỉ cho môi trường local |
-| Image Silo của bên thứ ba | Mã chỉ phụ thuộc API S3 (ADR-0007) |
+| Tệp lưu ở dịch vụ ngoài (Cloudflare R2); dev và production chung bucket tới go-live | Mã chỉ phụ thuộc API S3 (ADR-0016); bucket riêng tư, token *Object Read & Write* chỉ trên bucket cần dùng; khóa lộ thì thu hồi token ngay; reset bucket cùng database trước go-live |

@@ -34,7 +34,7 @@ Bộ này đánh số từ 0001. Hai ADR cũ ở `docs/adr/` được chuyển v
 | [0004](0004-saga-dieu-phoi-tai-rental.md) | Saga điều phối tập trung tại rental-service | Accepted |
 | [0005](0005-ban-chup-thay-join.md) | Bản chụp dữ liệu thay cho JOIN | Accepted |
 | [0006](0006-outbox-rabbitmq-consumer-idempotent.md) | Outbox, RabbitMQ, consumer chống trùng, DLQ | Accepted |
-| [0007](0007-object-storage-silo-api-s3.md) | Object storage Silo qua API S3 | Accepted |
+| [0007](0007-object-storage-silo-api-s3.md) | Object storage Silo qua API S3 | Superseded by ADR-0016 |
 | [0008](0008-bo-mongodb-notification-dung-postgresql.md) | Bỏ MongoDB, notification dùng PostgreSQL | Accepted |
 | [0009](0009-dat-coc-qua-payos-vi-trung-gian.md) | Đặt cọc qua payOS, ví trung gian, chi tay có chứng từ | Accepted |
 | [0010](0010-gop-quan-ly-san-pham-vao-listing.md) | Gộp quản lý sản phẩm vào listing | Accepted |
@@ -43,3 +43,4 @@ Bộ này đánh số từ 0001. Hai ADR cũ ở `docs/adr/` được chuyển v
 | [0013](0013-typeorm-migration.md) | Migration TypeORM, tắt `synchronize` | Accepted |
 | [0014](0014-template-nestjs-dung-chung.md) | Template NestJS dùng chung, payment bằng NestJS | Accepted |
 | [0015](0015-danh-muc-dia-gioi-truoc-2025-tham-chieu-bang-id.md) | Danh mục tỉnh → quận/huyện trước 1/7/2025, tin đăng tham chiếu bằng id | Proposed |
+| [0016](0016-object-storage-cloudflare-r2-bo-silo.md) | Object storage Cloudflare R2 cho dev và production, bỏ container Silo | Accepted |

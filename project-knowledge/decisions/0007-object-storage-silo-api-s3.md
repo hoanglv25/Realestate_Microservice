@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Trạng thái** | Accepted |
+| **Trạng thái** | Superseded by ADR-0016 (2026-11-26) |
 | **Ngày** | 2026-11-05 |
 | **Người quyết định** | Nhóm 5 |
 | **Liên quan** | Thay số cũ `docs/adr/ADR-007-object-storage.md` (nội dung giữ nguyên ý) |

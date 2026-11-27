@@ -91,3 +91,42 @@ curl.exe -X POST http://localhost:8080/api/v1/auth/register -H "Content-Type: ap
 ```
 
 **DoD:** Đăng ký, đăng nhập, `/me` qua 8080; cùng `X-Request-ID` ở log gateway và identity. Đặt tag `v0.1-skeleton`.
+
+---
+
+## T1.4 Object storage chuyển sang Cloudflare R2, gỡ container Silo
+
+> Task ngoài kế hoạch, thêm 2026-11-26 theo ADR-0016 và C26 (A chốt 2026-11-26).
+
+| | |
+|---|---|
+| **Người làm** | A |
+| **Thời lượng** | ~6 giờ (ước 2026-11-26) `[cần xác nhận]` |
+| **Hạn** | `[cần xác nhận]` — A chốt; cần xong trước khi deploy lên Render |
+| **Mã WBS** | Ngoài file xlsx |
+| **Đọc trước** | `decisions/0016-object-storage-cloudflare-r2-bo-silo.md`, `van-de-can-quyet-dinh.md` C26 và mục D 2026-11-26, `design/SHARED/RE.SERVICE_TEMPLATE/` (v2.1), `guides/RE_Docker_Local_Guide.md` |
+| **Phụ thuộc** | Bucket `listing-images`, `payment-proofs` và token R2 đã tạo (2026-11-26); T2.2, T3.x (sửa code đã merge) |
+
+**Các bước:**
+
+1. Sửa thiết kế trước: `RE.SERVICE_TEMPLATE` v2.2 (bỏ tạo bucket lúc khởi động, test hạ tầng S3), `RE.LISTING/Processing_Flow.md` nhãn S3; kèm `CHANGELOG.md`.
+2. `services/_template-nest`: xóa `ensureBucket`, `ensureBucketsWithRetry`, `bucketsReady`, `onApplicationBootstrap` khỏi `StorageService`; test hạ tầng S3 tự bỏ qua khi `.env` gốc không cấu hình S3. Chép sang api-gateway, identity, listing, payment, rental.
+3. Test hạ tầng của listing đọc `S3_*` từ `.env` gốc thay vì `localhost:9000`; test ảnh tự xóa key đã tải.
+4. `infra/compose/docker-compose.yml`: gỡ service `s3`, volume `s3_data`, `depends_on: s3`; listing, payment lấy `S3_*` từ `.env`. `infra/scripts/check-infra.*` bỏ kiểm `re-s3`.
+5. `.env.example` gốc và của service, README, `RE_Docker_Local_Guide.md`, `security-policy.md`, `architecture.md`, walkthrough liên quan.
+
+**Kiểm chứng:**
+
+```powershell
+pnpm --filter @realestate/template-nest test
+pnpm --filter @realestate/listing test
+pnpm --filter @realestate/payment test
+pnpm --filter @realestate/listing test:infra
+pnpm --filter @realestate/payment test:infra
+pnpm lint; pnpm format:check; pnpm build; pnpm contracts:check
+pnpm infra:up; pnpm infra:check
+```
+
+Compose profile `apps`: listing, payment khởi động không có log tạo bucket; `/health` có `checks.s3 = "up"`; upload ảnh qua gateway lưu lên R2.
+
+**DoD:** Không còn container `s3`; test unit, e2e của mọi service pass; `test:infra` của listing, payment pass với R2; test S3 bỏ qua (không fail) khi `.env` không có S3; tài liệu và walkthrough cập nhật (CLAUDE.md §8).
