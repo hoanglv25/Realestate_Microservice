@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-26 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-27 (T1.4: S3 chuyển sang Cloudflare R2) |
 | **Thành phần** | `services/listing/` (cổng 3002, `listing_db` PostGIS, bucket `listing-images`) |
-| **Task** | T2.2 (CRUD, duyệt, ảnh), T2.3 (tìm kiếm PostGIS, `/internal/*`, giữ chỗ), T2.4 (seed 30 tin) và T2.6 (danh mục tỉnh/quận, tin dùng `cityId`/`districtId`) — `implementation/PHASE-2.md` |
-| **Thiết kế** | `design/LISTING/RE.LISTING/` v1.5, `design/LISTING/RE.LOCATION/` v1.0, ADR-0010, ADR-0015 (Proposed); `design/SHARED/RE.SERVICE_TEMPLATE/` v2.1 |
+| **Task** | T2.2 (CRUD, duyệt, ảnh), T2.3 (tìm kiếm PostGIS, `/internal/*`, giữ chỗ), T2.4 (seed 30 tin) và T2.6 (danh mục tỉnh/quận, tin dùng `cityId`/`districtId`) — `implementation/PHASE-2.md`; T1.4 (S3 trên Cloudflare R2, bỏ tạo bucket lúc khởi động) |
+| **Thiết kế** | `design/LISTING/RE.LISTING/` v1.6, `design/LISTING/RE.LOCATION/` v1.0, ADR-0010, ADR-0015 (Proposed), ADR-0016; `design/SHARED/RE.SERVICE_TEMPLATE/` v2.2 |
 | **Commit / PR** | T2.2: PR #19. T2.3: PR #21. T2.4: PR #23. T2.6: chưa có (nhánh `feature/T2.6-location-catalog`) |
 
 ## 1. Luồng chung
@@ -21,7 +21,7 @@ sequenceDiagram
     participant C as Chủ trọ
     participant L as listing
     participant DB as listing_db
-    participant S3 as S3 (Silo)
+    participant S3 as S3 (Cloudflare R2)
     participant A as Quản trị viên
     C->>L: POST /listings
     L->>DB: INSERT ... (PENDING_REVIEW, AVAILABLE)
@@ -98,7 +98,7 @@ services/listing/
 
 ## 3. Chức năng từng file
 
-Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `messaging/`, `Dockerfile`, `test/*` còn lại) xem `RE.SERVICE_TEMPLATE`, không lặp ở đây. Riêng `src/storage/storage.service.ts` là bản template v2.1 (có `headObject`).
+Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `messaging/`, `Dockerfile`, `test/*` còn lại) xem `RE.SERVICE_TEMPLATE`, không lặp ở đây. Riêng `src/storage/storage.service.ts` là bản template v2.2: có `headObject`, **không** tạo bucket lúc khởi động (bucket `listing-images` tạo sẵn trên R2, ADR-0016); health `s3` = `HeadBucket listing-images`.
 
 | File | Làm gì | Gọi tới / được gọi bởi | Ghi chú |
 |---|---|---|---|
@@ -139,7 +139,8 @@ Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `mes
 | `src/listing/controllers/locations.controller.ts` | T2.6: `GET /cities`, `GET /districts` (`@Public()`) | Gateway dòng 6a | |
 | `services/api-gateway/src/gateway/routes.ts` (+ `routes.spec.ts`, `route-resolver.spec.ts`) | T2.6: hai dòng `GET` mức `public` tới listing | `RouteResolver` | Danh sách route không cần token cập nhật theo `RE.GATEWAY` v1.4 |
 | `test/setup-infra-env.ts` | Dùng `listing_db`, schema test, `search_path` có `public` | `jest-infra.json` | Cần `public` để thấy kiểu `geography` |
-| `test/listing-crud.infra-spec.ts` | 38 ca với Postgres + S3 thật: test 1, 2, 3, 12–17, số truy vấn | `pnpm test:infra` | |
+| `test/listing-crud.infra-spec.ts` | 38 ca với Postgres + S3 thật: test 1, 2, 3, 12–17, số truy vấn. T1.4: S3 là R2 (`listing-images`), cấu hình lấy bằng `s3TestEnv` từ `.env` gốc; thiếu thì khối ảnh và khối đo số truy vấn `describe.skip`, phần còn lại vẫn chạy | `pnpm test:infra` | Ảnh thử xóa ở `afterAll` theo `uploadedKeys` |
+| `test/helpers/infra.ts#s3TestEnv` (T1.4, chép từ template) | Đọc `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_TEST_BUCKET` từ `.env` gốc; thiếu một biến → `null` để test cần S3 bỏ qua | `listing-crud.infra-spec.ts`, `storage.infra-spec.ts` | `listing-search`, `listing-internal`, `location` dùng giá trị S3 giả `http://s3.invalid` vì không gọi S3 |
 | `test/listing-search.infra-spec.ts` | Test 4, 18, 19, số truy vấn: 9 tin tọa độ thật ở Hà Nội, khoảng cách đối chứng bằng haversine (độc lập với PostGIS), kiểm 4 index có trong catalog, `EXPLAIN` dùng `ix_listings_location` trên ~5.000 tin ngẫu nhiên đã `ANALYZE` | `pnpm test:infra` | Seed thật là T2.4 nên dùng fixture; T2.4 chạy lại `EXPLAIN` trên seed |
 | `test/listing-internal.infra-spec.ts` | Test 5–11, 20, 21: kể cả 50 lời giữ chỗ đồng thời (đúng một `200`, `version = 1`), mọi response khớp `listing-internal.v1.yaml` | `pnpm test:infra` | Đã thử đột biến: bỏ điều kiện `held_until < now()` thì 4 ca fail, test 7 nhận 50 lần `200` |
 | `test/helpers/listing-fixtures.ts` | `insertListing` (dựng tin bằng SQL, đặt được `status`, `held_*`), `haversineM`. T2.6: nhận TÊN tỉnh/quận, tra ra id bằng truy vấn con | Các infra-spec | API không cho đặt các trường này |
@@ -151,7 +152,7 @@ Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `mes
 | `test/location.infra-spec.ts` | T2.6: `RE.LOCATION` test 1–6, 8, 9 (13 ca): dữ liệu migration (số theo tỉnh, NFC, mọi tên seed có trong danh mục), hai route qua HTTP không token, `isDistrictInCity`, số truy vấn | `pnpm test:infra` | Danh sách mong đợi viết lại độc lập trong test |
 | `test/listing-location-migration.infra-spec.ts` | T2.6: `RE.LISTING` test 25 + `RE.LOCATION` test 7: chạy migration tới trước v1.5, chèn tin kiểu cũ (khớp, tỉnh ngoài danh mục có ảnh, quận sai tỉnh, đã xóa mềm, thiếu tên), chạy v1.5, kiểm, `down` hai lần, `up` lại | `pnpm test:infra` | Đã thử đột biến: bỏ bước xóa thì migration lỗi `NOT NULL`, test fail |
 | `.env.example`, `Dockerfile` | Cấu hình dev, ảnh Docker | | |
-| `infra/compose/docker-compose.yml` (khối `listing`) | Service `re-listing`, không publish cổng | gateway gọi `http://listing:3002` | Chạy kèm `--profile dev` (cần `s3`, `postgres`) |
+| `infra/compose/docker-compose.yml` (khối `listing`) | Service `re-listing`, không publish cổng; `S3_*` lấy từ `.env` (R2, T1.4) | gateway gọi `http://listing:3002` | Chạy kèm `--profile dev` (cần `postgres`; không còn container `s3`) |
 
 ## 4. Quyết định không hiển nhiên
 
@@ -186,6 +187,7 @@ Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `mes
 | Seed tin không đọc `identity_db`, id chủ trọ viết cứng ở hai nơi | listing không import code hay DB của identity (ADR-0005); bảng id ở `RE_Docker_Local_Guide.md §5` là nguồn đối chiếu | Dùng file chung giữa hai service | `architecture.md §6` |
 | Không seed `HELD`, `DEPOSITED`, ảnh | Hai trạng thái cần `held_by_deposit_id` của đơn có thật; ảnh cần đối tượng trên S3 | Tạo đơn giả, upload ảnh trong seed | A duyệt 2026-11-20 |
 | Bản chép template còn `src/messaging`, migration messaging | ADR-0014: không sửa riêng bản chép | Xóa phần thừa | `tech-debt.md` #15 |
+| Không tạo bucket lúc khởi động (T1.4) | Token R2 *Object Read & Write* không có quyền `CreateBucket` (`AccessDenied`): giữ bước này thì mỗi lần khởi động có 10 dòng log giả; bucket tạo tay trên dashboard | Thêm biến tắt `S3_AUTO_CREATE_BUCKETS`; token Admin | ADR-0016, C26, `RE.SERVICE_TEMPLATE` v2.2 |
 
 ## 5. Câu hỏi vấn đáp
 
@@ -214,6 +216,8 @@ Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `mes
 | Tin cũ có tên tỉnh/quận lạ khi nâng cấp DB thì sao? | Migration v1.5 xóa cứng tin đó cùng ảnh và báo số lượng; `down` không khôi phục được | `RE.LISTING §6.1`, test 25 |
 | Muốn thêm tỉnh mới? | Viết migration nạp dữ liệu mới, không sửa migration `1733200000000` | `RE.LOCATION §6` |
 | Vì sao `GET /districts` chỉ 1 truy vấn trong khi thiết kế ghi 2? | `findAndCount` của TypeORM bỏ câu `count` khi trang đầu chưa đầy; trang sau vẫn 2 câu | `location.infra-spec.ts` test 9 |
+| Ảnh lưu ở đâu, dev và production có khác không? | Cloudflare R2, bucket `listing-images` riêng tư; trình duyệt PUT/GET thẳng bằng presigned URL (CORS cho origin giao diện). Dev và production chung bucket tới go-live, lúc đó reset cùng database | ADR-0016 |
+| Server có kết nối được R2 không, xem ở đâu? | `/health` → `checks.s3` (`HeadBucket listing-images`); sai khóa hoặc chưa có bucket thì `down` | `storage.service.ts`, `RE_Docker_Local_Guide.md` |
 
 ## 6. Hạn chế đã biết
 
@@ -232,3 +236,5 @@ Phần chép nguyên từ `_template-nest` (`common/`, `health/`, `redis/`, `mes
 | Hai infra-spec mới lặp phần dựng app, schema, đếm truy vấn của `listing-crud.infra-spec.ts` | Khó bảo trì | Gom vào `test/helpers/` (cùng loại tech-debt #13) |
 | `address` bắt buộc và `description` ≤ 5000 chỉ kiểm ở API (A chốt 2026-11-20, `RE.LISTING` v1.3); từ T2.6 `city_id`, `district_id` đã `NOT NULL` | DDL vẫn cho `address` `NULL`; dữ liệu chèn thẳng vào DB có thể thiếu | Thêm `NOT NULL` bằng migration nếu cần (đổi bảng, MAJOR) |
 | Ảnh quá giới hạn 10 khi xác nhận, ảnh hợp lệ nằm lại trên S3 | Như trên | Cùng tech-debt #14 |
+| Dev và production dùng chung bucket R2 tới go-live (T1.4) | Ảnh thử lẫn ảnh thật nếu chưa reset | Reset cùng lúc DB và bucket trước go-live; sau go-live tách bucket dev (ADR-0016) |
+| Test ảnh và đo số truy vấn cần internet và khóa R2 | Máy không có khóa thì hai khối đó bị bỏ qua | Điền `.env` gốc (`S3_*`, `S3_TEST_BUCKET`) |

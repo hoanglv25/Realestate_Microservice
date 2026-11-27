@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-22 (T3.4a: payOS thật, webhook giả) |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-26 (T1.4: S3 chuyển sang Cloudflare R2, bỏ container Silo) |
 
 ## 1. Yêu cầu
 
@@ -21,7 +21,7 @@ pnpm install
 Copy-Item .env.example .env       # không commit .env
 pnpm keys:generate                # secrets/jwt-private.pem, jwt-public.pem
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"   # dán kết quả vào BANK_ACCOUNT_ENCRYPTION_KEY trong .env (một lần; identity cần khi chạy profile apps)
-pnpm infra:up                     # profile dev: Postgres+PostGIS, Redis, RabbitMQ, Silo, Mailpit
+pnpm infra:up                     # profile dev: Postgres+PostGIS, Redis, RabbitMQ, Mailpit (S3 là R2, không có container)
 pnpm infra:check                  # OK/FAIL từng thành phần
 pnpm contracts:check
 ```
@@ -32,7 +32,7 @@ pnpm contracts:check
 
 | Profile | Gồm | Lệnh |
 |---|---|---|
-| `dev` | Postgres, Redis, RabbitMQ, S3, Mailpit (SMTP giả) | `pnpm infra:up` |
+| `dev` | Postgres, Redis, RabbitMQ, Mailpit (SMTP giả). S3 là Cloudflare R2 ngoài máy (ADR-0016) | `pnpm infra:up` |
 | `demo` | `dev` + Elasticsearch, Kibana (`http://127.0.0.1:5601`) | `pnpm infra:demo` |
 | `apps` | `identity`, `api-gateway` (thêm dần listing, rental, payment, notification) | Lệnh compose đầy đủ bên dưới; không có script `pnpm` riêng (chốt 2026-11-17) |
 
@@ -72,7 +72,7 @@ curl.exe -i http://localhost:8080/internal/users/x    # 404 GATEWAY_ROUTE_NOT_FO
 | Postgres | `localhost:5433` | `postgres:5432` |
 | Redis | `localhost:6379` | `redis:6379` |
 | RabbitMQ | `localhost:5672`, UI `15672` | `rabbitmq:5672` |
-| S3 (Silo) | `localhost:9000`, console `9001` | `s3:9000`; `S3_PUBLIC_ENDPOINT=http://localhost:9000` |
+| S3 (Cloudflare R2) | `S3_ENDPOINT` trong `.env` (cần internet, khóa R2) | Cùng `S3_ENDPOINT`; không đặt `S3_PUBLIC_ENDPOINT` |
 | Mailpit | SMTP `localhost:1025`, giao diện `http://localhost:8025` | `mailpit:1025`; xem email OTP, đặt lại mật khẩu |
 
 Hạ tầng chỉ publish ra `127.0.0.1`.
@@ -172,7 +172,8 @@ Build từ gốc repo: `docker build -f services/<service>/Dockerfile -t realest
 | Identity dừng khi `pnpm dev` báo thiếu `SMTP_HOST`, `MAIL_FROM` | `services/identity/.env` cũ chưa có hai biến này: chép từ `services/identity/.env.example` |
 | `DEPENDENCY_UNAVAILABLE` | `pnpm infra:check`; trên laptop dùng cổng 5433 |
 | Consumer không nhận | Queue có binding chưa (`definitions.json`), `RABBITMQ_URL` có `%2F` |
-| Presigned URL không mở được | `S3_PUBLIC_ENDPOINT` |
+| Presigned URL không mở được, upload từ trình duyệt lỗi CORS | CORS bucket `listing-images` có origin giao diện (`GET`, `PUT`, `HEAD`, header `Content-Type`); URL hết hạn sau `S3_PRESIGN_TTL_SECONDS` |
+| `/health` báo `s3` down | Ngay sau khi khởi động, mạng chậm: lần gọi R2 đầu (DNS + TLS) có thể vượt giới hạn 2 giây của health check, gọi lại sau vài giây. Vẫn down: `S3_ENDPOINT`, khóa R2 sai hoặc token bị thu hồi, token thiếu quyền trên bucket đầu của `S3_BUCKETS`, bucket chưa tạo trên R2 (service không tự tạo) |
 | Webhook không tới | Đường hầm còn chạy, URL trong trang payOS đúng (đổi mỗi lần chạy lại đường hầm); `payos_webhook_events` có dòng mới chưa |
 | Webhook tới nhưng đơn không `PAID` | `result` của webhook (`INVALID_SIGNATURE`: sai `PAYOS_CHECKSUM_KEY`; `AMOUNT_MISMATCH`: trả sai số tiền); RabbitMQ chạy chưa (`payment.deposited` nằm ở `outbox_events` chưa `published_at`) |
 | Theo một request | Lọc log theo `correlationId` |
