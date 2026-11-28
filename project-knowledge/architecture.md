@@ -86,7 +86,7 @@ Listing dừng thì không đặt cọc được: cái giá của một lời g�
 | Xác thực | JWT RS256, argon2id |
 | Lưu tệp | Cloudflare R2 qua API S3, AWS SDK; dev và production chung tài khoản tới go-live (ADR-0016) |
 | Thời gian thực | Socket.IO: `@nestjs/websockets`, `@nestjs/platform-socket.io` — chốt 2026-11-16 |
-| Email | SMTP qua nodemailer ở identity (OTP, đặt lại mật khẩu); Mailpit khi dev |
+| Email | SMTP qua nodemailer ở identity (OTP, đặt lại mật khẩu); dev dùng Gmail App Password, không còn Mailpit (C27) |
 | Đăng nhập Google | Google Sign-In ở Next.js; identity kiểm ID token bằng `google-auth-library` (chốt 2026-11-13) |
 | Log | pino JSON; Filebeat, Elasticsearch, Kibana ở profile demo |
 | Kiểm thử | Jest, Postman, Newman, k6 |

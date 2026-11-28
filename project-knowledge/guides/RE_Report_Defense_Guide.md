@@ -52,7 +52,7 @@ Thêm từ quyết định 2026-11-12 (`implementation/van-de-can-quyet-dinh.md`
 | Bảng 5.1 | `REFUND_WINDOW_SECONDS`, `AUTO_RELEASE_SECONDS`, `RELEASE_REMINDER_SECONDS` | A3 |
 | §4.7.1, Bảng 4.6 | Bỏ câu "nhóm cần thống nhất timeout"; ghi giá trị đã chốt và số đo E1, E2 | A2 |
 | §1.3, Bảng 2.3, §3.1, §4.5 | Bỏ "nộp hồ sơ người thuê", thêm vào Bảng 7.1 | C3 họp |
-| §1.3, §7.3, Bảng 4.4 | Email OTP qua Mailpit và đăng nhập Google đã làm (không còn là hướng phát triển); thêm khóa tài khoản | B10, C2 họp |
+| §1.3, §7.3, Bảng 4.4 | Email OTP qua SMTP (dev: Gmail, không còn Mailpit từ C27) và đăng nhập Google đã làm (không còn là hướng phát triển); thêm khóa tài khoản | B10, C2 họp |
 | §6.1, tài liệu tham khảo [4], [7] | Trỏ `project-knowledge/architecture.md`, `project-knowledge/decisions/` thay `docs/architecture/service-boundaries.md`, `docs/adr/` (đã xóa) | B14 |
 | §3.6–3.7 | Bảng đường dẫn API đã chốt (từ `openapi.json`) | A6 |
 

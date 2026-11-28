@@ -5,17 +5,17 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-20 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-28 |
 | **Thành phần** | `services/identity/` (cổng 3001); phần chép từ `services/_template-nest/` ghi rõ ở §3 |
-| **Task** | `T2.1`, phần `seed:users` của `T2.4`, và `T2.5` (xác minh OTP, quên mật khẩu, Google, khóa tài khoản, số điện thoại; `implementation/PHASE-2.md`); phần đã có từ trước (đăng ký, đăng nhập, làm mới, `/me`, seed ADMIN) giải thích ở §1, §3 để đủ bức tranh |
-| **Thiết kế** | `design/IDENTITY/RE.IDENTITY/` (v2.4), `design/SHARED/RE.SERVICE_TEMPLATE/` (v2.0), `design/PAYMENT/RE.PAYOUT/` (v1.2, chỉ một `[cần xác nhận]`) |
-| **Commit / PR** | T2.1: PR #16, merge `b88817a` (2026-11-19). C19: nhánh `fix/C19-uuid-validation-failed`. T2.5: nhánh `feature/T2.5-identity-otp-account` (chưa commit lúc viết, A xem diff trước) |
+| **Task** | `T2.1`, phần `seed:users` của `T2.4`, và `T2.5` (xác minh OTP, quên mật khẩu, Google, khóa tài khoản, số điện thoại; `implementation/PHASE-2.md`); phần đã có từ trước (đăng ký, đăng nhập, làm mới, `/me`, seed ADMIN) giải thích ở §1, §3 để đủ bức tranh; `T1.5` gỡ Mailpit (`implementation/PHASE-1.md`) |
+| **Thiết kế** | `design/IDENTITY/RE.IDENTITY/` (v2.5), `design/SHARED/RE.SERVICE_TEMPLATE/` (v2.0), `design/PAYMENT/RE.PAYOUT/` (v1.2, chỉ một `[cần xác nhận]`) |
+| **Commit / PR** | T2.1: PR #16, merge `b88817a` (2026-11-19). C19: nhánh `fix/C19-uuid-validation-failed`. T2.5: nhánh `feature/T2.5-identity-otp-account` (chưa commit lúc viết, A xem diff trước). T1.5: nhánh `feature/T1.5-remove-mailpit` |
 
 ## 1. Luồng chung
 
 Identity giữ tài khoản, phiên và tài khoản nhận tiền. Client gọi qua gateway (8080): `auth/*` công khai, `users/me`, `users/me/bank-account` cần JWT, `admin/users` cần `ADMIN` (gateway chặn thô, `RolesGuard` ở identity kiểm lại). Payment lấy tài khoản nhận tiền qua API nội bộ `/internal/users/:id/bank-account`, chỉ gọi được trong mạng Docker (gateway trả 404 cho `/internal/*`).
 
-**T2.5** thêm vòng đời tài khoản: đăng ký sinh tài khoản `PENDING_VERIFICATION` và gửi **OTP 6 số** qua email (Mailpit khi dev); nhập đúng OTP (`verify-otp`) thì `ACTIVE` và cấp phiên luôn; đăng nhập kiểm trạng thái **sau** mật khẩu. Thêm quên và đặt lại mật khẩu (token ngẫu nhiên gửi qua email), đăng nhập Google (kiểm ID token, tự liên kết theo email), khóa và mở khóa tài khoản (thu hồi mọi phiên), `PATCH /users/me`. Mọi email **gửi nền, không chờ**: kết quả `201`/`202` không phụ thuộc SMTP và độ trễ không lộ email nào có tài khoản.
+**T2.5** thêm vòng đời tài khoản: đăng ký sinh tài khoản `PENDING_VERIFICATION` và gửi **OTP 6 số** qua email (SMTP thật, dev dùng Gmail App Password; Mailpit gỡ ở T1.5); nhập đúng OTP (`verify-otp`) thì `ACTIVE` và cấp phiên luôn; đăng nhập kiểm trạng thái **sau** mật khẩu. Thêm quên và đặt lại mật khẩu (token ngẫu nhiên gửi qua email), đăng nhập Google (kiểm ID token, tự liên kết theo email), khóa và mở khóa tài khoản (thu hồi mọi phiên), `PATCH /users/me`. Mọi email **gửi nền, không chờ**: kết quả `201`/`202` không phụ thuộc SMTP và độ trễ không lộ email nào có tài khoản.
 
 T2.1 thêm ba nhóm: (1) tài khoản nhận tiền, số tài khoản **mã hóa AES-256-GCM** khi lưu và chỉ trả đầy đủ cho payment; (2) danh sách người dùng cho quản trị viên; (3) `revokeAllForUser` trong store refresh token (T2.5 dùng khi khóa tài khoản, đặt lại mật khẩu).
 
@@ -47,7 +47,7 @@ sequenceDiagram
     participant I as identity
     participant R as Redis
     participant DB as identity_db
-    participant M as Mailpit (SMTP)
+    participant M as SMTP
     C->>I: POST /auth/register
     I->>R: assertReady (PING, 503 nếu Redis dừng) — TRƯỚC khi ghi DB
     I->>DB: BEGIN, INSERT users (PENDING_VERIFICATION) + outbox, COMMIT (2 truy vấn)
@@ -89,7 +89,7 @@ services/identity/
 │  │  ├─ errors/identity.errors.ts
 │  │  └─ seed/                 # seed-admin.ts, seed-users.ts, seed-users.data.ts (+ spec)
 │  └─ scripts/                 # seed-admin.ts, seed-users.ts, export-openapi.ts
-├─ test/                       # e2e (chép từ template), *.infra-spec.ts (Postgres, Redis, RabbitMQ, Mailpit thật), helpers/ (identity-infra, mailpit)
+├─ test/                       # e2e (chép từ template), *.infra-spec.ts (Postgres, Redis, RabbitMQ thật; email bắt trong bộ nhớ), helpers/ (identity-infra, mail-capture)
 ├─ scripts/ensure-env.mjs
 ├─ Dockerfile, Dockerfile.dockerignore, nest-cli.json, tsconfig*.json, package.json
 └─ .env.example, README.md
@@ -142,7 +142,7 @@ services/identity/
 | File | Làm gì | Ghi chú |
 |---|---|---|
 | `src/config/env.bootstrap.ts` | Nạp `.env`, validate, thoát mã 1 nếu thiếu biến | Import đầu tiên của `main.ts`; bỏ qua phần riêng của identity khi `NODE_ENV=test` |
-| `src/config/env.validation.ts` | Joi cho biến chung; T2.1 thêm `BANK_ACCOUNT_ENCRYPTION_KEY`; T2.5 thêm `SMTP_*`, `MAIL_FROM`, `OTP_*`, `PASSWORD_RESET_*`, `GOOGLE_CLIENT_ID` (tùy chọn ở đây, `SMTP_HOST`, `MAIL_FROM` bắt buộc ở `identity.env.ts`) | `SMTP_PORT` giới hạn 1–65535 (`Joi.port()` nhận cả 0) |
+| `src/config/env.validation.ts` | Joi cho biến chung; T2.1 thêm `BANK_ACCOUNT_ENCRYPTION_KEY`; T2.5 thêm `SMTP_*`, `MAIL_FROM`, `OTP_*`, `PASSWORD_RESET_*`, `GOOGLE_CLIENT_ID`; T1.5 đổi mặc định `SMTP_PORT` 1025 → 587 (tùy chọn ở đây, `SMTP_HOST`, `MAIL_FROM` bắt buộc ở `identity.env.ts`) | `SMTP_PORT` giới hạn 1–65535 (`Joi.port()` nhận cả 0) |
 | `src/config/feature-flags.ts`, `service-info.ts`, `config.module.ts` | Bật module tùy chọn theo env, thông tin service, nạp `ConfigModule` | Chép từ template |
 | `src/database/migrations/1730000000001-create-messaging-tables.ts` | `outbox_events`, `processed_events` | Từ template |
 | `src/database/migrations/1731000000000-create-identity-tables.ts` | `users`, `user_identities` | Đã có |
@@ -152,9 +152,8 @@ services/identity/
 | `src/database/data-source.ts`, `database.module.ts`, `database.health.ts`, `transformers.ts` | DataSource cho CLI, module DB, health, transformer cột | Từ template |
 | `src/scripts/seed-admin.ts`, `seed-users.ts`, `export-openapi.ts`, `scripts/ensure-env.mjs` | Script `pnpm seed:admin`, `pnpm seed:users` (biến tạm `SEED_USER_PASSWORD`), xuất OpenAPI, tạo `.env` khi `pnpm dev` | |
 | `Dockerfile`, `Dockerfile.dockerignore` | Ảnh 3 stage | Không đổi ở T2.1; khóa mã hóa truyền qua env của compose |
-| `.env.example`, `README.md` | Mẫu biến (khóa để trống kèm lệnh sinh), bảng biến | T2.1 thêm `BANK_ACCOUNT_ENCRYPTION_KEY`; T2.5 thêm SMTP, OTP, đặt lại mật khẩu, Google |
-| `infra/compose/docker-compose.yml` (service `identity`) | `BANK_ACCOUNT_ENCRYPTION_KEY: ${BANK_ACCOUNT_ENCRYPTION_KEY:-}`; T2.5: `SMTP_HOST: mailpit`, `SMTP_PORT: 1025`, `MAIL_FROM`, `OTP_*`, `PASSWORD_RESET_*`, `GOOGLE_CLIENT_ID: ${…:-}`, `depends_on: mailpit` | Để trống khóa thì chính identity báo thiếu rồi dừng |
-| `infra/compose/docker-compose.yml` (service `mailpit`) | T2.5: SMTP giả `127.0.0.1:1025`, giao diện `127.0.0.1:8025`, image ghim `axllent/mailpit:v1.32.0`, profile `dev`, `demo`, healthcheck `mailpit readyz` | Không gửi email thật |
+| `.env.example`, `README.md` | Mẫu biến (khóa để trống kèm lệnh sinh), bảng biến | T2.1 thêm `BANK_ACCOUNT_ENCRYPTION_KEY`; T2.5 thêm SMTP, OTP, đặt lại mật khẩu, Google; T1.5 mẫu SMTP Gmail (`smtp.gmail.com`, 465, App Password để trống) |
+| `infra/compose/docker-compose.yml` (service `identity`) | `BANK_ACCOUNT_ENCRYPTION_KEY: ${BANK_ACCOUNT_ENCRYPTION_KEY:-}`; T2.5: `MAIL_FROM`, `OTP_*`, `PASSWORD_RESET_*`, `GOOGLE_CLIENT_ID: ${…:-}`; T1.5: `SMTP_HOST`, `SMTP_PORT` (mặc định 587), `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` lấy từ `.env` gốc bằng `${…:-}`, bỏ `depends_on: mailpit` | Để trống khóa hay `SMTP_HOST`/`MAIL_FROM` thì chính identity báo thiếu rồi dừng; không dùng `:?` để `infra:up` của người chưa cấu hình không hỏng |
 
 ### 3.3 Phần chép từ template (không giải thích lại)
 
@@ -183,14 +182,14 @@ services/identity/
 | `test/admin-users.infra-spec.ts` | infra | Route 8: quyền, thứ tự, phân trang, lọc role, ≤ 2 truy vấn, `EXPLAIN` dùng index |
 | `test/auth.infra-spec.ts`, `seed-admin.infra-spec.ts`, `messaging.infra-spec.ts` | infra | Đã có; T2.5: đăng ký rồi kích hoạt bằng SQL (`registerActive`) vì đăng nhập cần `ACTIVE`; `seed-admin` thêm test 12b |
 | `test/otp.store.infra-spec.ts` | infra (Redis) | Script Lua đếm lần thử, 20 lần song song chỉ 5 thấy hash, không tạo key không TTL, cooldown `NX` song song, `assertReady` |
-| `test/otp.infra-spec.ts` | infra (+ Mailpit) | Test 13–17: đúng một thư OTP, Redis chỉ giữ băm, `phone` 409, login theo trạng thái, OTP đúng/sai/5 lần/song song, resend, Redis dừng → 503; đếm truy vấn |
-| `test/password-reset.infra-spec.ts` | infra (+ Mailpit) | Test 18, 19: email lạ không thư, token chỉ băm, dùng một lần, 10 reset song song một thắng, thu hồi mọi phiên |
+| `test/otp.infra-spec.ts` | infra (email bắt bằng `mail-capture`) | Test 13–17: đúng một thư OTP, Redis chỉ giữ băm, `phone` 409, login theo trạng thái, OTP đúng/sai/5 lần/song song, resend, Redis dừng → 503; đếm truy vấn |
+| `test/password-reset.infra-spec.ts` | infra (email bắt bằng `mail-capture`) | Test 18, 19: email lạ không thư, token chỉ băm, dùng một lần, 10 reset song song một thắng, thu hồi mọi phiên |
 | `test/google.infra-spec.ts`, `google-disabled.infra-spec.ts` | infra | Test 20, 21, 21a, 24 (verifier giả qua `overrides`); `GOOGLE_CLIENT_ID` trống ở **file riêng** vì ConfigModule chốt env lúc import |
 | `test/account.infra-spec.ts` | infra | Test 22, 22a, 23: khóa (refresh 401, login 403, idempotent, thu hồi mọi họ), mở khóa theo `email_verified_at`, phân quyền, `PATCH /users/me` (test 23a: `fullName: null` → 400) |
-| `test/helpers/identity-infra.ts`, `test/helpers/mailpit.ts` | helper | Dựng identity thật một lần (schema, Redis, đếm SQL); đọc, chờ thư trong Mailpit (hỏi lại vì gửi nền) |
+| `test/helpers/identity-infra.ts`, `test/helpers/mail-capture.ts` | helper | Dựng identity thật một lần (schema, Redis, đếm SQL), mặc định thay `MAIL_TRANSPORT` bằng `captureTransport` (`overrides` của test đặt sau nên ghi đè được), dọn thư khi `close()`; `mail-capture` ghi thư vào bộ nhớ (mới nhất trước), `waitForMails` hỏi lại vì gửi nền, `otpOf`, `resetTokenOf`, `expectNoMail` (T1.5, thay `mailpit.ts` đọc API Mailpit) |
 | `test/seed-users.infra-spec.ts` | infra | T2.4: 8 người đúng id/vai trò, mật khẩu argon2id đăng nhập được, 8 event khớp contract, chạy lại không đổi gì, có sẵn một phần, 5 lần đồng thời, 3 kiểu xung đột (email khác id, khác vai trò, id khác email) |
 | `test/contracts-helper.e2e-spec.ts`, `test/helpers/contracts.ts` | e2e | Chép từ template: `expectEventMatchesContract`, `expectResponseMatchesOpenApi` |
-| `test/setup-infra-env.ts` | cấu hình | Khóa cố định chỉ cho test; trỏ SMTP về Mailpit |
+| `test/setup-infra-env.ts` | cấu hình | Khóa cố định chỉ cho test; `SMTP_HOST` `localhost:1025` không có máy chủ (spec tự dựng app mà gửi thư chỉ ghi log `warn`) |
 
 ## 4. Quyết định không hiển nhiên
 
@@ -232,6 +231,7 @@ services/identity/
 | Google: tài khoản đã liên kết `sub` khác → **401**, không gỡ liên kết cũ; chỉ kết luận ở **lần chạy lại** | Gỡ liên kết cũ thì một tài khoản Google mới chiếm được tài khoản có sẵn chỉ bằng email. Lần đầu chưa kết luận vì đua cùng `sub` cũng có thể vi phạm chỉ mục này; lần chạy lại tìm thấy liên kết theo `sub` nên đua cùng `sub` không tới được nhánh lỗi | Gỡ liên kết cũ, gắn `sub` mới; 409 với mã mới (thiết kế không có mã) | A duyệt 2026-11-20, `API_Spec §1.8` dòng 4a v2.4 |
 | `PATCH /users/me`: `fullName` dùng `@ValidateIf(v !== undefined)`, không `@IsOptional()` | `@IsOptional()` bỏ qua cả `null`, `null` lọt xuống cột `NOT NULL` thành `500`; `phone` vẫn `@IsOptional()` vì `null` là xóa số | Bắt lỗi `23502` ở service | `API_Spec §1.10` v2.4, test 23a |
 | Test `GOOGLE_CLIENT_ID` trống nằm ở file riêng | `ConfigModule` chốt env lúc import `AppModule`, cùng file jest chỉ import một lần | Đổi env giữa hai `describe` (không có tác dụng) | `standards/gotchas.md` |
+| `test:infra` bắt email bằng transport giả trong bộ nhớ thay vì Mailpit (T1.5, C27) | Không còn container Mailpit; thay đúng chỗ giao cho SMTP (`MAIL_TRANSPORT`), giữ `MailService`, nội dung thư, gửi nền và mọi kiểm (người gửi, tiêu đề, OTP, token, số thư); không thêm thư viện | `smtp-server` trong tiến trình test (giữ đường SMTP thật, thêm thư viện); gửi Gmail thật (không đọc lại được, tốn hạn mức) | A duyệt 2026-11-28, C27 |
 
 ## 5. Câu hỏi vấn đáp
 
@@ -262,6 +262,7 @@ services/identity/
 | Khóa tài khoản xong, người đó còn làm được gì? | Không đăng nhập, không refresh; access token đang có dùng được tối đa 15 phút (hạn chế đã biết, `security-policy §6`). Tin, đơn, tiền không bị động tới | `account.infra-spec.ts` |
 | Khóa hai lần có sao không? | Không: `UPDATE … WHERE status <> 'LOCKED'` đổi 0 dòng, vẫn thu hồi phiên, giữ lý do và thời điểm khóa đầu tiên | `account.infra-spec.ts` |
 | Vì sao mở khóa tài khoản chưa xác minh về `PENDING_VERIFICATION`? | Đừng để khóa rồi mở khóa thành cách "xác minh ngầm"; họ phải nhập OTP | `account.infra-spec.ts` (22a) |
+| Không còn Mailpit thì test làm sao biết OTP đã được gửi và đọc được mã? | `startIdentityInfra` thay provider `MAIL_TRANSPORT` bằng `captureTransport`: `MailService` vẫn chạy thật, chỉ bước giao cho SMTP ghi vào mảng trong bộ nhớ; test hỏi lại `waitForMails` rồi lấy mã bằng `otpOf`. Bỏ ghi thư thì 13/23 test OTP đỏ | `test/helpers/mail-capture.ts` |
 | Contract-first nghĩa là gì ở đây? | `identity-internal.v1.yaml` viết trước; test `expectResponseMatchesOpenApi` kiểm body **thật** khớp, bắt cả trường thừa | ADR-0012 |
 
 ## 6. Hạn chế đã biết
@@ -276,6 +277,8 @@ services/identity/
 | `expectResponseMatchesOpenApi` chép logic `rewriteRefs` của `check-openapi.mjs` | Hai nơi phải sửa cùng lúc nếu đổi cách nạp schema | Script ESM không import được từ test TS; gộp khi có chỗ đặt chung (ghi `tech-debt.md`) |
 | `resend-otp` còn lộ email có tài khoản: `429` chỉ với tài khoản có thật (cooldown lưu theo `userId`) | Gọi hai lần liên tiếp phân biệt được email có tài khoản `PENDING_VERIFICATION` | Đặt thời gian chờ theo `lower(email)` cho mọi request (`van-de-can-quyet-dinh.md` C21, chưa sửa); `tech-debt.md` #17 |
 | Gửi email nền: nếu Redis hoặc SMTP lỗi sau commit thì tài khoản có nhưng không có OTP | Người dùng phải bấm gửi lại; `201` không bảo đảm đã có thư | Chấp nhận (`API_Spec §1.1`) |
+| `test:infra` không đi qua SMTP thật (T1.5) | Lỗi cấu hình `createTransport` (cổng, TLS, đăng nhập) không bị test bắt | Kiểm tay khi đổi cấu hình: đăng ký qua Swagger, OTP về hộp thư; log `warn` `responseCode` 535 là sai App Password |
+| Ai chạy identity cũng cần thông tin SMTP thật (T1.5) | Thiếu `SMTP_HOST`/`MAIL_FROM` thì identity không khởi động; sai App Password thì không có OTP | Gmail chung của nhóm, App Password chia sẻ qua kênh riêng, không vào repo |
 | Refresh không kiểm `status` | Tài khoản bị khóa nhưng có họ token chưa thu hồi (Redis lỗi lúc khóa) vẫn refresh được tới khi quản trị viên gọi lại khóa | Chấp nhận: thiết kế dựa vào `revokeAllForUser`; gọi lại khóa là xong |
 | `env.bootstrap.spec.ts` chạy tiến trình thật qua ts-node, có lần đỏ khi cả bộ test chạy song song | Đỏ ngẫu nhiên, chạy lại xanh | `tech-debt.md` #18 |
 | DB dev có user `smoke*@example.com` do kiểm chứng T2.5 | Không ảnh hưởng | Xóa khi dọn dev DB |

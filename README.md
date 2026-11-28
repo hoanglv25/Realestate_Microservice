@@ -78,7 +78,7 @@ Các lệnh dưới đây là script trong `package.json`, đã bọc sẵn `--e
 `-f infra/compose/docker-compose.yml`:
 
 ```powershell
-pnpm infra:up       # profile dev: Postgres, Redis, RabbitMQ, Mailpit (S3 là Cloudflare R2, không có container)
+pnpm infra:up       # profile dev: Postgres, Redis, RabbitMQ (S3 là Cloudflare R2, email là SMTP thật trong .env; không có container)
 pnpm infra:demo     # profile demo: dev + Elasticsearch + Kibana (http://127.0.0.1:5601)
 pnpm infra:check    # kiểm tra toàn bộ hạ tầng, in OK/FAIL từng dòng (thoát 0 nếu tất cả OK)
 pnpm infra:logs     # theo dõi log

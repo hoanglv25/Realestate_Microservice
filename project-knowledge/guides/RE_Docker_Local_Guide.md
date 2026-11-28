@@ -21,7 +21,7 @@ pnpm install
 Copy-Item .env.example .env       # không commit .env
 pnpm keys:generate                # secrets/jwt-private.pem, jwt-public.pem
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"   # dán kết quả vào BANK_ACCOUNT_ENCRYPTION_KEY trong .env (một lần; identity cần khi chạy profile apps)
-pnpm infra:up                     # profile dev: Postgres+PostGIS, Redis, RabbitMQ, Mailpit (S3 là R2, không có container)
+pnpm infra:up                     # profile dev: Postgres+PostGIS, Redis, RabbitMQ (S3 là R2, email là SMTP thật; không có container)
 pnpm infra:check                  # OK/FAIL từng thành phần
 pnpm contracts:check
 ```
@@ -32,7 +32,7 @@ pnpm contracts:check
 
 | Profile | Gồm | Lệnh |
 |---|---|---|
-| `dev` | Postgres, Redis, RabbitMQ, Mailpit (SMTP giả). S3 là Cloudflare R2 ngoài máy (ADR-0016) | `pnpm infra:up` |
+| `dev` | Postgres, Redis, RabbitMQ. S3 là Cloudflare R2 ngoài máy (ADR-0016); email là SMTP thật cấu hình ở `.env` (C27) | `pnpm infra:up` |
 | `demo` | `dev` + Elasticsearch, Kibana (`http://127.0.0.1:5601`) | `pnpm infra:demo` |
 | `apps` | `identity`, `api-gateway` (thêm dần listing, rental, payment, notification) | Lệnh compose đầy đủ bên dưới; không có script `pnpm` riêng (chốt 2026-11-17) |
 
@@ -73,7 +73,7 @@ curl.exe -i http://localhost:8080/internal/users/x    # 404 GATEWAY_ROUTE_NOT_FO
 | Redis | `localhost:6379` | `redis:6379` |
 | RabbitMQ | `localhost:5672`, UI `15672` | `rabbitmq:5672` |
 | S3 (Cloudflare R2) | `S3_ENDPOINT` trong `.env` (cần internet, khóa R2) | Cùng `S3_ENDPOINT`; không đặt `S3_PUBLIC_ENDPOINT` |
-| Mailpit | SMTP `localhost:1025`, giao diện `http://localhost:8025` | `mailpit:1025`; xem email OTP, đặt lại mật khẩu |
+| SMTP (email) | `SMTP_*`, `MAIL_FROM` trong `services/identity/.env` (dev: `smtp.gmail.com:465`, App Password) | `SMTP_*`, `MAIL_FROM` trong `.env` gốc (giống nhau); thư về hộp thư thật |
 
 Hạ tầng chỉ publish ra `127.0.0.1`.
 
@@ -167,7 +167,7 @@ Build từ gốc repo: `docker build -f services/<service>/Dockerfile -t realest
 | `up` profile `apps` báo thiếu file secret | Chưa chạy `pnpm keys:generate` |
 | Gateway trả `503 UPSTREAM_UNAVAILABLE` | Service đích chưa chạy hoặc chưa `healthy` (`docker compose ... ps`) |
 | Đăng ký lỗi 500 ngay sau `up` | Chưa chạy `migration:run` của identity (T2.5 thêm cột `users.status`, `phone`...) |
-| Đăng ký xong không thấy email OTP | Mailpit chạy chưa (`docker ps` có `re-mailpit`); thư gửi nền nên có thể trễ vài trăm ms; xem log identity có dòng `Gửi email thất bại` (lỗi `warn`) |
+| Đăng ký xong không thấy email OTP | Xem mục Spam; thư gửi nền nên có thể trễ vài giây; xem log identity có dòng `Gửi email thất bại` (lỗi `warn`): `responseCode` 535 là sai `SMTP_USER`/App Password hoặc chưa bật Xác minh 2 bước |
 | `POST /auth/google` trả 503 | `GOOGLE_CLIENT_ID` trống (đúng thiết kế khi chưa cấu hình Google) |
 | Identity dừng khi `pnpm dev` báo thiếu `SMTP_HOST`, `MAIL_FROM` | `services/identity/.env` cũ chưa có hai biến này: chép từ `services/identity/.env.example` |
 | `DEPENDENCY_UNAVAILABLE` | `pnpm infra:check`; trên laptop dùng cổng 5433 |
