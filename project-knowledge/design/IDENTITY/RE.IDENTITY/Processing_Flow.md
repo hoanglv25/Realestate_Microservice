@@ -4,7 +4,7 @@
 |---|---|
 | **Chức năng** | Đăng ký và xác minh OTP, đăng nhập (mật khẩu, Google), quên mật khẩu, làm mới, đăng xuất, khóa tài khoản, cung cấp tài khoản nhận tiền |
 | **Tham chiếu** | `API_Spec.md`, `Component_Class_Design.md`, `services/identity/README.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v2.4 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-28 — v2.5 |
 
 ## 1. Đăng ký
 
@@ -63,7 +63,7 @@ sequenceDiagram
     participant I as identity
     participant DB as identity_db
     participant R as Redis
-    participant M as SMTP (Mailpit)
+    participant M as SMTP
     C->>I: POST /auth/register
     I->>DB: BEGIN, INSERT users (PENDING_VERIFICATION), outbox identity.registered, COMMIT
     I-->>C: 201 (không chờ phần dưới)

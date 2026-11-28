@@ -2,6 +2,27 @@
 
 > Tạo ở lần sửa đầu tiên sau baseline v1.0 (`standards/design-standards.md §9`). Mục mới lên đầu, không sửa mục cũ.
 
+## [v2.5] — 2026-11-28
+
+- **type:** PATCH
+- **author:** hoang.lv
+- **summary:** Gỡ Mailpit (C27, T1.5): email OTP, đặt lại mật khẩu đi qua SMTP cấu hình ở `.env` (dev: Gmail App Password); mặc định `SMTP_PORT` 587; test 13 kiểm thư qua transport giả.
+
+### Thay đổi
+
+**1.**
+
+| # | Vị trí | Loại |
+|---|---|---|
+| 1 | `API_Spec.md` dòng CSDL (đầu file), §5 (`SMTP_*`, `MAIL_FROM`) | Sửa |
+| 2 | `Processing_Flow.md` sơ đồ đăng ký | Sửa nhãn |
+| 3 | `Component_Class_Design.md` §5 test 13 | Sửa |
+| 4 | `Component_Class_Design.md` đoạn "Gửi email không chờ" | Sửa câu |
+
+- **Cũ:** dev gửi email vào Mailpit (`mailpit:1025`, `MAIL_FROM=no-reply@realestate.local`); test 13 kiểm "Mailpit nhận một email OTP"; mặc định `SMTP_PORT` 1025.
+- **Mới:** không còn container Mailpit; identity (host và compose profile `apps`) đọc `SMTP_*`, `MAIL_FROM` từ `.env`, dev dùng Gmail App Password; mặc định `SMTP_PORT` 587; test hạ tầng thay `MAIL_TRANSPORT` bằng bản ghi nhận trong bộ nhớ, giữ nguyên các kiểm (người gửi, tiêu đề, OTP, token, số thư).
+- **Lý do:** A chốt C27 2026-11-28 (đảo quyết định 2026-11-12 "Email qua Mailpit"). Không đổi route, mã lỗi, luồng gửi không chờ, `contracts/` hay sự kiện.
+
 ## [v2.4] — 2026-11-20
 
 - **type:** PATCH

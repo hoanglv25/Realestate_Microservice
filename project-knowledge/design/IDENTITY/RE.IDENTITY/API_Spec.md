@@ -5,8 +5,8 @@
 | **Mã chức năng** | `RE.IDENTITY` — tài khoản, xác minh email OTP, quên mật khẩu, đăng nhập Google, phiên, khóa tài khoản, tài khoản nhận tiền, vai trò |
 | **Service** | `identity` (cổng 3001) |
 | **Quy tắc** | BR-01, BR-02; quy tắc phụ Bảng 2.6 |
-| **CSDL** | `identity_db` / `identity_user`; Redis (refresh token, OTP, token đặt lại mật khẩu); SMTP (Mailpit khi dev) |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v2.4 |
+| **CSDL** | `identity_db` / `identity_user`; Redis (refresh token, OTP, token đặt lại mật khẩu); SMTP (dev: Gmail App Password, v2.5) |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-28 — v2.5 |
 
 ## 1. API công khai
 
@@ -227,7 +227,7 @@ API nội bộ trả số đầy đủ để quản trị viên chuyển khoản
 | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS` | `900`, `604800` | |
 | `RABBITMQ_URL`, `OUTBOX_RELAY_ENABLED` | | Chỉ phát |
 | `BANK_ACCOUNT_ENCRYPTION_KEY` | bắt buộc; base64 giải ra đúng 32 byte | Khóa AES-256-GCM mã hóa số tài khoản. Sai độ dài hoặc thiếu → service in lỗi rồi dừng (`env.validation.ts`). Dev: sinh bằng `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`, không commit |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | dev: `mailpit`, `1025`, trống, trống, `no-reply@realestate.local` | Gửi OTP, link đặt lại (B10) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | `SMTP_PORT` mặc định `587` (v2.5); dev: `smtp.gmail.com`, `465`, địa chỉ Gmail, App Password (chỉ ở `.env`), `Tên <địa chỉ Gmail>`. Bắt buộc `SMTP_HOST`, `MAIL_FROM` | Gửi OTP, link đặt lại (B10). Không còn Mailpit (C27, v2.5) |
 | `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS` | `300`, `5`, `60` | Báo cáo Bảng 2.6 |
 | `PASSWORD_RESET_TTL_SECONDS` | `900` | Đề xuất |
 | `PASSWORD_RESET_URL` | `http://localhost:3000/reset-password` | Trang Next.js |
