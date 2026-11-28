@@ -134,7 +134,7 @@ Cắt từ trên xuống. Báo cáo §4.7.3 gọi Phase 3 kết thúc là "đi�
 
 **Không được cắt:** saga có bù trừ, hết hạn giữ chỗ, timeout + retry, `/health`, OpenAPI, Postman ≥ 10 request, 2 thí nghiệm có số liệu, DLQ.
 
-**Ngoài lộ trình (X1–X5, tương ứng WBS E9-1…E9-5 trong file xlsx; chỉ làm khi đạt M3 feature freeze đúng hạn):** X1 circuit breaker rental → listing, payment → rental; X2 Filebeat → Elasticsearch → Kibana; X3 email thông báo qua Mailpit (email OTP, quên mật khẩu đã vào T2.5); X4 khiếu nại `DISPUTED`; X5 trợ lý chat gợi ý phòng.
+**Ngoài lộ trình (X1–X5, tương ứng WBS E9-1…E9-5 trong file xlsx; chỉ làm khi đạt M3 feature freeze đúng hạn):** X1 circuit breaker rental → listing, payment → rental; X2 Filebeat → Elasticsearch → Kibana; X3 email thông báo qua SMTP (email OTP, quên mật khẩu đã vào T2.5; Mailpit đã gỡ ở T1.5); X4 khiếu nại `DISPUTED`; X5 trợ lý chat gợi ý phòng.
 
 ## 7. Rủi ro
 

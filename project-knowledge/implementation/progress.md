@@ -35,6 +35,7 @@
 - [x] T1.1 CI: lint, format, contracts, build, test — A (2026-11-18, PR T1.1; bảo vệ nhánh `develop`, `main`)
 - [x] T1.2 api-gateway — A (2026-11-17, PR #7)
 - [x] T1.3 Compose profile `apps`, identity sau gateway — A (2026-11-18, `d3a2062`)
+- [ ] T1.5 Gỡ Mailpit, email identity qua SMTP thật — A (ngoài kế hoạch, C27 2026-11-28)
 
 ## Phase 2 — identity, listing
 
