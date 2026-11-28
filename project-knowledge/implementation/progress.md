@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-22 |
+| **Chủ sở hữu / Cập nhật** | hoang.lv — 2026-11-28 |
 
 **Bảo vệ:** 2026-12-18 (M5) · **Mốc mới** (dời 2026-11-16): M0 11-20, M1 11-27, M2 12-04, M3 12-09, M4 12-11 (`README.md` — Lịch và mốc) · **Hạn nộp báo cáo:** 2026-12-11 (M4, chốt 2026-11-16) · **Đề tài:** Thiết kế hệ thống cho thuê nhà, căn hộ, chung cư Real-estate theo kiến trúc microservices · **Nhóm:** 5 · **Số thành viên:** 3
 
@@ -52,7 +52,7 @@
 - [x] T3.4a Webhook payOS, ghi nhận đặt cọc, tiền đến muộn — A (2026-11-22, PR #28, `6d03f6c`; gồm kiểm chứng payOS thật chuyển từ T3.2)
 - [x] T3.4b Hết hạn giữ chỗ — A (2026-11-25, PR #30, `ef2abb5`; tách 2026-11-22)
 - [x] T3.5 Vòng đời đơn: bàn giao, nhận phòng, tự giải ngân — A (2026-11-25, PR #31, `549977a`; giao lại từ B theo chốt 2026-11-18)
-- [ ] T3.6 Payout: hoàn, rút, chứng từ, ví — C
+- [x] T3.6 Payout: hoàn, rút, chứng từ, ví — A (2026-11-25, PR #32, `a076858`; giao lại từ C)
 
 ## Phase 4 — Bất đồng bộ, notification, chat
 
@@ -105,3 +105,4 @@
 | 2026-11-25 | A | T3.4b merge vào `develop` (PR #30, `ef2abb5`), CI `check`, `test` (template-nest, identity, api-gateway, listing, payment, rental), `ci` xanh. Có: `HoldExpiryJob` (BR-09: hủy link trước, nhả chỗ sau), khung `IntervalJob` (`SagaReconcileJob` kế thừa), `HOLD_EXPIRY_INTERVAL_MS`. 6 commit của PR còn dòng ghi công AI (trái `git-workflow.md` dòng 39); merge rồi nên giữ nguyên, không viết lại `develop` | Tick T3.4b; tiếp T3.5 |
 | 2026-11-25 | A | T3.5 kiểm chứng compose: `AUTO_RELEASE_SECONDS=120`, `RELEASE_REMINDER_SECONDS=60`; đặt cọc tin 22 + webhook giả (`orderCode` 100003) → `PAID` 08:35:50Z → `rental.release-reminder` 08:36:55Z → `RELEASED` trigger `AUTO` 08:37:55Z (5 giây sau mốc), tin `RENTED` (E6). rental unit 648, e2e 97, `test:infra` 67/67 (máy A); E7 kiểm bằng chạy đồng thời + 2 khe đua cố định. Nhánh hoàn/rút chạy đầu-cuối chờ T3.6 (payment chưa có `refund-requests`, chưa phát `refunded`…). `RE.DEPOSIT_LIFECYCLE` v1.2 | PR T3.5; sau merge tick T3.5; tiếp T3.6 |
 | 2026-11-25 | A | T3.5 merge vào `develop` (PR #31, `549977a`). Có: máy trạng thái đơn, route 1–7, `withdrawal-eligibility`, `AutoReleaseJob`, `DeadlineJob`, `SagaReconcileJob` (c), handler `refunded`/`refund-rejected`/`withdrawal-completed`, `audit_log`. Migration `1736000000000` cần chạy với `DATABASE_URL` của rental (`services/rental/.env` chưa có) | Tick T3.5; tiếp T3.6 |
+| 2026-11-28 | A | T3.6 merge vào `develop` (PR #32, `a076858`, 2026-11-25) nhưng chưa tick: commit đóng task bị sót ở nhánh kế tiếp | Tick T3.6 (đóng bù trên nhánh T1.5); tag `v0.5-deposit-flow` chưa đặt |

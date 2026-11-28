@@ -1,7 +1,7 @@
 ---
 task: T3.6 Payout: hoàn, rút, chứng từ, ví
 created: 2026-11-25
-status: in_progress
+status: done
 phase: implementation/PHASE-3.md#T3.6
 branch: feature/T3.6-payout (từ `develop` tại `549977a`, sau PR #31 T3.5)
 ---
@@ -21,7 +21,7 @@ Payment (`RE.PAYOUT`): ví trung gian trừ tiền (`debit`), yêu cầu hoàn (
 - [ ] `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm contracts:check` không lỗi
 - [ ] Số truy vấn mỗi route đếm bằng log SQL, trong ngưỡng (ghi có tiền 8)
 - [x] Kiểm chứng (`PHASE-3.md`): `guides/RE_Report_Defense_Guide.md §4` bước 3–7; truy vấn bất biến ví (E10) (2026-11-25 21:03, compose máy A)
-- [ ] `RE.PAYOUT` v1.3 + `CHANGELOG.md` (đóng §9); walkthrough payment; `.env.example`, compose
+- [x] `RE.PAYOUT` v1.3 + `CHANGELOG.md` (đóng §9); walkthrough payment; `.env.example`, compose (có trên `develop` sau PR #32)
 - [ ] Sau merge: tag `v0.5-deposit-flow` (A đặt và push)
 
 ## Các bước thực hiện (tổng quan)
@@ -33,7 +33,7 @@ Payment (`RE.PAYOUT`): ví trung gian trừ tiền (`debit`), yêu cầu hoàn (
 - [x] 5. TDD: `refund-amount`, `WalletService.debit`, `AuditService`, `ReceiptService` (2026-11-25; payment `test` 24 suite, 234 PASS)
 - [x] 6. TDD: `RefundService` (nội bộ + admin), `WithdrawalService`, `PayoutQueryService`; controller (2026-11-25)
 - [x] 7. Test hạ tầng (gồm test 10 đồng thời, E10), đếm truy vấn (2026-11-25; S3 giả trong `payout.infra-spec`, cần A chạy `test:infra` đủ trên máy có S3)
-- [ ] 8. Kiểm chứng (máy A); walkthrough, `code-review`, commit (không dòng ghi công), PR; tag sau merge
+- [x] 8. Kiểm chứng (máy A); walkthrough, `code-review`, commit (không dòng ghi công), PR — merge PR #32 `a076858` 2026-11-25; tag sau merge **chưa đặt**
 
 ## Tái sử dụng
 
@@ -53,3 +53,9 @@ Payment (`RE.PAYOUT`): ví trung gian trừ tiền (`debit`), yêu cầu hoàn (
 | Đổi `413` của multer thành `400 PAYMENT_RECEIPT_INVALID` | VIẾT MỚI | `src/payment/http/receipt-too-large.interceptor.ts`; grep `PayloadTooLarge` trong `services/*/src`: chưa có |
 | Bộ dựng test unit payout (`fakeDb`, id mẫu) | VIẾT MỚI (test) | `test/helpers/payout-kit.ts`; không vào build |
 | `createTestApp` thay provider | MỞ RỘNG (test) | thêm `options.overrides` để thay `ReceiptService` bằng bản S3 giả |
+
+## Đóng task (2026-11-28)
+
+- Merge vào `develop` qua PR #32 (`a076858`, 2026-11-25 21:35); `develop` bắt buộc CI `ci` xanh. Tick bù T3.6 ở `implementation/progress.md` trên nhánh `feature/T1.5-remove-mailpit`.
+- Các ô DoD test/lint/đếm truy vấn ở trên để nguyên: output không được dán vào file này lúc làm, không tick bù khi không có bằng chứng.
+- Còn lại: tag `v0.5-deposit-flow` (A đặt và push).
