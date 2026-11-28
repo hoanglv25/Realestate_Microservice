@@ -29,9 +29,10 @@ Object.assign(process.env, {
   SWAGGER_ENABLED: 'false',
   DATABASE_URL: databaseUrl,
   RABBITMQ_URL: rabbitUrl,
-  // SMTP: Mailpit của compose profile dev (gửi nền; không có Mailpit thì chỉ log warn, test không hỏng)
+  // SMTP: không có máy chủ thật (C27). Test dùng startIdentityInfra bắt thư bằng transport giả
+  // (helpers/mail-capture.ts); test tự dựng app mà có gửi thư thì lỗi kết nối chỉ thành log warn (gửi nền).
   SMTP_HOST: 'localhost',
-  SMTP_PORT: root.MAILPIT_SMTP_PORT ?? '1025',
+  SMTP_PORT: '1025',
   MAIL_FROM: 'no-reply@realestate.local',
   // Khóa cố định CHỈ cho test (32 byte base64), không dùng ở môi trường thật
   BANK_ACCOUNT_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),

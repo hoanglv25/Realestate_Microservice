@@ -101,7 +101,7 @@ describe('validateEnv', () => {
   describe('biến của T2.5 (SMTP, OTP, đặt lại mật khẩu, Google)', () => {
     it('áp mặc định theo API_Spec §5', () => {
       expect(validateEnv({ SERVICE_NAME: 'identity' })).toMatchObject({
-        SMTP_PORT: 1025,
+        SMTP_PORT: 587, // C27: không còn Mailpit (1025), mặc định cổng SMTP chuẩn có STARTTLS
         OTP_TTL_SECONDS: 300,
         OTP_MAX_ATTEMPTS: 5,
         OTP_RESEND_COOLDOWN_SECONDS: 60,
