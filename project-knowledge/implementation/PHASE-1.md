@@ -130,3 +130,40 @@ pnpm infra:up; pnpm infra:check
 Compose profile `apps`: listing, payment khởi động không có log tạo bucket; `/health` có `checks.s3 = "up"`; upload ảnh qua gateway lưu lên R2.
 
 **DoD:** Không còn container `s3`; test unit, e2e của mọi service pass; `test:infra` của listing, payment pass với R2; test S3 bỏ qua (không fail) khi `.env` không có S3; tài liệu và walkthrough cập nhật (CLAUDE.md §8).
+
+---
+
+## T1.5 Gỡ Mailpit, email identity qua SMTP thật
+
+> Task ngoài kế hoạch, thêm 2026-11-28 theo C27 (A chốt 2026-11-28).
+
+| | |
+|---|---|
+| **Người làm** | A |
+| **Thời lượng** | ~3 giờ (ước 2026-11-28) |
+| **Hạn** | `[cần xác nhận]` — A chốt |
+| **Mã WBS** | Ngoài file xlsx |
+| **Đọc trước** | `van-de-can-quyet-dinh.md` C27 và mục D 2026-11-28, `design/IDENTITY/RE.IDENTITY/` (v2.4), `guides/RE_Identity_Code_Walkthrough.md`, `guides/RE_Docker_Local_Guide.md` |
+| **Phụ thuộc** | T2.5 (đã merge); tài khoản Gmail gửi thư + App Password của nhóm |
+
+**Các bước:**
+
+1. Sửa thiết kế trước: `RE.IDENTITY` v2.5 (bỏ Mailpit ở API_Spec §5, Processing_Flow, test 13 của Component_Class_Design); kèm `CHANGELOG.md`. Sửa `business-spec/RE.SRS.md`, `RE.BUSINESS_RULES.md`.
+2. identity: mặc định `SMTP_PORT` 587 (`env.validation.ts`, test trước); `test:infra` thay `test/helpers/mailpit.ts` bằng transport giả `test/helpers/mail-capture.ts` (`startIdentityInfra` override `MAIL_TRANSPORT`).
+3. `infra/compose/docker-compose.yml`: gỡ service `mailpit`, `depends_on: mailpit`; identity lấy `SMTP_*`, `MAIL_FROM` từ `.env`.
+4. `.env.example` gốc và của identity (mẫu Gmail, bỏ `MAILPIT_*`), README, `architecture.md`, `domain-glossary.md`, `RE_Docker_Local_Guide.md`, walkthrough identity.
+
+**Kiểm chứng:**
+
+```powershell
+docker rm -f re-mailpit
+pnpm --filter @realestate/identity test
+pnpm --filter @realestate/identity test:e2e
+pnpm --filter @realestate/identity test:infra
+pnpm lint; pnpm format:check; pnpm build; pnpm contracts:check
+pnpm infra:up
+```
+
+`docker ps` không có `re-mailpit`. identity `pnpm dev` với SMTP Gmail: đăng ký qua Swagger → OTP về hộp thư thật → `verify-otp` trả cặp token.
+
+**DoD:** Không còn container `mailpit`; identity `test`, `test:e2e`, `test:infra` pass không cần SMTP; tài liệu, Báo cáo v2 (`business-spec/`) và walkthrough cập nhật (CLAUDE.md §8).

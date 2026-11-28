@@ -2,11 +2,15 @@ import Redis from 'ioredis';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { DataSource } from 'typeorm';
+import { MAIL_TRANSPORT } from '../../src/identity/services/mail.service';
 import type { TestApp } from './create-test-app';
 import { INFRA_TEST_SCHEMA, readRootEnv } from './infra';
+import { captureTransport, clearCapturedMails } from './mail-capture';
 
 /**
- * Dựng identity thật (Postgres schema riêng, Redis tiền tố ngẫu nhiên, RabbitMQ không relay, Mailpit) cho test T2.5.
+ * Dựng identity thật (Postgres schema riêng, Redis tiền tố ngẫu nhiên, RabbitMQ không relay) cho test T2.5.
+ * Email không đi qua SMTP: `MAIL_TRANSPORT` được thay bằng `captureTransport` (`mail-capture.ts`, C27);
+ * `overrides` của từng test đặt sau nên ghi đè được.
  * Dùng lại cùng cách dựng với auth.infra-spec.ts; file mới dùng helper này thay vì chép ~60 dòng khởi tạo.
  */
 export interface IdentityInfra {
@@ -64,7 +68,10 @@ export async function startIdentityInfra(options: StartOptions = {}): Promise<Id
   });
 
   const { createTestApp } = await import('./create-test-app');
-  const t = await createTestApp([], [], { swagger: false, overrides: options.overrides });
+  const t = await createTestApp([], [], {
+    swagger: false,
+    overrides: [{ token: MAIL_TRANSPORT, value: captureTransport }, ...(options.overrides ?? [])],
+  });
   const ds = t.app.get(DataSource);
   await ds.runMigrations();
 
@@ -90,6 +97,7 @@ export async function startIdentityInfra(options: StartOptions = {}): Promise<Id
     redisPrefix,
     async close() {
       await t.app.close();
+      clearCapturedMails();
       const keys = await redis.keys(`${redisPrefix}*`);
       if (keys.length > 0) await redis.del(...keys);
       await redis.quit();

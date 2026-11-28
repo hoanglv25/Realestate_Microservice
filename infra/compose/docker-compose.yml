@@ -6,8 +6,8 @@
 #   docker compose --env-file .env -f infra/compose/docker-compose.yml --profile dev --profile apps up -d --build
 #
 # Profile:
-#   dev  : postgres, redis, rabbitmq (+ rabbitmq-init chay mot lan), mailpit. Object storage la Cloudflare R2
-#          (dich vu ngoai, ADR-0016), khong co container.
+#   dev  : postgres, redis, rabbitmq (+ rabbitmq-init chay mot lan). Object storage la Cloudflare R2
+#          (dich vu ngoai, ADR-0016), email la SMTP that cau hinh o .env (C27); khong co container cho hai thu nay.
 #   demo : dev + elasticsearch + kibana (de do RAM; ELK day du o GD10)
 #   apps : cac service ung dung (identity, api-gateway). Luon chay KEM dev hoac demo.
 #          Truoc khi up: pnpm keys:generate (secrets/jwt-*.pem) va migration cua tung service.
@@ -83,23 +83,6 @@ services:
       - redis_data:/data
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli ping | grep -q PONG']
-      interval: 10s
-      timeout: 5s
-      retries: 6
-    networks: [realestate-net]
-
-  # Mailpit: SMTP gia + giao dien xem email (OTP, dat lai mat khau cua identity). Khong gui email that.
-  # SMTP 1025, giao dien http://localhost:8025. Ghim ban v1.32.0 (khong dung latest).
-  mailpit:
-    <<: *restart
-    image: axllent/mailpit:v1.32.0
-    container_name: re-mailpit
-    profiles: [dev, demo]
-    ports:
-      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
-      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
-    healthcheck:
-      test: ['CMD', '/mailpit', 'readyz']
       interval: 10s
       timeout: 5s
       retries: 6
@@ -253,10 +236,14 @@ services:
       # De trong thi chinh identity bao thieu va dung (khong dung `:?` vi se lam hong ca `infra:up`
       # cua nguoi chua them bien). Sinh khoa: xem .env.example
       BANK_ACCOUNT_ENCRYPTION_KEY: ${BANK_ACCOUNT_ENCRYPTION_KEY:-}
-      # Email OTP, dat lai mat khau: trong Docker dung ten service mailpit (khong phai localhost)
-      SMTP_HOST: mailpit
-      SMTP_PORT: '1025'
-      MAIL_FROM: ${MAIL_FROM:-no-reply@realestate.local}
+      # Email OTP, dat lai mat khau: SMTP that (dev: Gmail App Password) lay tu .env goc (C27).
+      # Khong dung `:?` de `infra:up` cua nguoi chua them bien khong hong; thieu SMTP_HOST, MAIL_FROM
+      # thi chinh identity bao thieu va dung.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-300}
       OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
       OTP_RESEND_COOLDOWN_SECONDS: ${OTP_RESEND_COOLDOWN_SECONDS:-60}
@@ -272,8 +259,6 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
-        condition: service_healthy
-      mailpit:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully

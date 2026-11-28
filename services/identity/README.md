@@ -23,8 +23,8 @@ check và outbox (đọc README của template cho các phần đó).
 | `GET /admin/users`                      | `ADMIN`   | Danh sách người dùng, phân trang (T2.1)                                                                                                                                                                                    |
 | `POST /admin/users/:id/lock`, `/unlock` | `ADMIN`   | Khóa (body `{ reason }`, thu hồi mọi phiên, idempotent), mở khóa (về `ACTIVE` nếu đã xác minh email, ngược lại `PENDING_VERIFICATION`)                                                                                     |
 
-Email (OTP, link đặt lại mật khẩu) gửi **nền, không chờ**: lỗi SMTP chỉ ghi log `warn`, response không đổi. Dev dùng Mailpit
-(`pnpm infra:up`), xem thư ở `http://localhost:8025`.
+Email (OTP, link đặt lại mật khẩu) gửi **nền, không chờ**: lỗi SMTP chỉ ghi log `warn`, response không đổi. Không còn Mailpit (C27):
+dev gửi thật qua Gmail của nhóm, điền `SMTP_USER`, `SMTP_PASSWORD` (App Password), `MAIL_FROM` vào `.env`.
 
 Tài khoản `ADMIN` **không** đăng ký qua API; tạo bằng script seed (bên dưới).
 Swagger: `http://localhost:3001/api/docs`.
@@ -156,29 +156,29 @@ lỗi nêu dòng xung đột và hoàn tác cả lần nạp. Chưa ghi `status`
 
 ### Biến môi trường riêng của identity
 
-| Biến                                                                 | Mặc định                                     | Ý nghĩa                                                                                            |
-| -------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `JWT_PRIVATE_KEY_PATH` / `JWT_PRIVATE_KEY`                           | bắt buộc một trong hai                       | Khóa riêng RS256 để ký (đường dẫn tính từ `services/identity`, hoặc PEM với `\n`)                  |
-| `JWT_PUBLIC_KEY_PATH` / `JWT_PUBLIC_KEY`                             | bắt buộc một trong hai                       | Khóa công khai để kiểm tra token ở `/me`                                                           |
-| `JWT_ISSUER`                                                         | bắt buộc                                     | Ghi vào token và được kiểm tra khi verify                                                          |
-| `JWT_ACCESS_TTL_SECONDS`                                             | 900                                          | Thời hạn access token                                                                              |
-| `JWT_REFRESH_TTL_SECONDS`                                            | 604800                                       | Thời hạn refresh token                                                                             |
-| `BANK_ACCOUNT_ENCRYPTION_KEY`                                        | bắt buộc                                     | Khóa AES-256-GCM mã hóa số tài khoản nhận tiền: base64 của đúng 32 byte (sinh: xem `.env.example`) |
-| `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`                                | bắt buộc `SMTP_HOST`, `MAIL_FROM`; cổng 1025 | Gửi OTP, link đặt lại mật khẩu. Dev: Mailpit (`localhost`, `no-reply@realestate.local`)            |
-| `SMTP_USER`, `SMTP_PASSWORD`                                         | trống                                        | Chỉ khi dùng SMTP thật; mật khẩu chỉ ở `.env`                                                      |
-| `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS` | 300, 5, 60                                   | OTP (Báo cáo Bảng 2.6)                                                                             |
-| `PASSWORD_RESET_TTL_SECONDS`, `PASSWORD_RESET_URL`                   | 900, `http://localhost:3000/reset-password`  | Hạn token, trang Next.js nhận `?token=`                                                            |
-| `GOOGLE_CLIENT_ID`                                                   | trống                                        | `aud` của ID token Google. Trống: `POST /auth/google` trả 503, log `warn` lúc khởi động            |
-| `REDIS_URL`                                                          | bắt buộc                                     | Nơi lưu refresh token, OTP, token đặt lại mật khẩu                                                 |
-| `REFRESH_TOKEN_REDIS_PREFIX`                                         | `identity:`                                  | Tiền tố key Redis                                                                                  |
-| `OUTBOX_RELAY_ENABLED`                                               | `true`                                       | `false`: ghi outbox nhưng không gửi (dùng khi test)                                                |
+| Biến                                                                 | Mặc định                                    | Ý nghĩa                                                                                            |
+| -------------------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `JWT_PRIVATE_KEY_PATH` / `JWT_PRIVATE_KEY`                           | bắt buộc một trong hai                      | Khóa riêng RS256 để ký (đường dẫn tính từ `services/identity`, hoặc PEM với `\n`)                  |
+| `JWT_PUBLIC_KEY_PATH` / `JWT_PUBLIC_KEY`                             | bắt buộc một trong hai                      | Khóa công khai để kiểm tra token ở `/me`                                                           |
+| `JWT_ISSUER`                                                         | bắt buộc                                    | Ghi vào token và được kiểm tra khi verify                                                          |
+| `JWT_ACCESS_TTL_SECONDS`                                             | 900                                         | Thời hạn access token                                                                              |
+| `JWT_REFRESH_TTL_SECONDS`                                            | 604800                                      | Thời hạn refresh token                                                                             |
+| `BANK_ACCOUNT_ENCRYPTION_KEY`                                        | bắt buộc                                    | Khóa AES-256-GCM mã hóa số tài khoản nhận tiền: base64 của đúng 32 byte (sinh: xem `.env.example`) |
+| `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`                                | bắt buộc `SMTP_HOST`, `MAIL_FROM`; cổng 587 | Gửi OTP, link đặt lại mật khẩu. Dev: Gmail (`smtp.gmail.com`, `465`, `Tên <địa chỉ Gmail>`)        |
+| `SMTP_USER`, `SMTP_PASSWORD`                                         | trống                                       | Chỉ khi dùng SMTP thật; mật khẩu chỉ ở `.env`                                                      |
+| `OTP_TTL_SECONDS`, `OTP_MAX_ATTEMPTS`, `OTP_RESEND_COOLDOWN_SECONDS` | 300, 5, 60                                  | OTP (Báo cáo Bảng 2.6)                                                                             |
+| `PASSWORD_RESET_TTL_SECONDS`, `PASSWORD_RESET_URL`                   | 900, `http://localhost:3000/reset-password` | Hạn token, trang Next.js nhận `?token=`                                                            |
+| `GOOGLE_CLIENT_ID`                                                   | trống                                       | `aud` của ID token Google. Trống: `POST /auth/google` trả 503, log `warn` lúc khởi động            |
+| `REDIS_URL`                                                          | bắt buộc                                    | Nơi lưu refresh token, OTP, token đặt lại mật khẩu                                                 |
+| `REFRESH_TOKEN_REDIS_PREFIX`                                         | `identity:`                                 | Tiền tố key Redis                                                                                  |
+| `OUTBOX_RELAY_ENABLED`                                               | `true`                                      | `false`: ghi outbox nhưng không gửi (dùng khi test)                                                |
 
 ## Test
 
 ```powershell
 pnpm test          # unit (không cần hạ tầng)
 pnpm test:e2e      # e2e hạ tầng chung của template, không cần DB/Redis
-pnpm test:infra    # cần hạ tầng đang chạy: Postgres + Redis + RabbitMQ + Mailpit (pnpm infra:up)
+pnpm test:infra    # cần hạ tầng đang chạy: Postgres + Redis + RabbitMQ (pnpm infra:up); email bắt bằng transport giả, không cần SMTP
 ```
 
 `test:infra` dùng schema Postgres, tiền tố key Redis và khóa RSA riêng của test (xóa sau khi chạy),

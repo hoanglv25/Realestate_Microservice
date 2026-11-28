@@ -160,7 +160,7 @@ stateDiagram-v2
 - Chi hộ tự động về tài khoản ngân hàng: quản trị viên chuyển khoản tay.
 - Trợ lý chat gợi ý phòng (mở rộng X5).
 - Khiếu nại `DISPUTED` (mở rộng X4).
-- Email thông báo nghiệp vụ (mở rộng X3). Email OTP và quên mật khẩu **trong phạm vi** (identity gửi qua SMTP, Mailpit khi dev).
+- Email thông báo nghiệp vụ (mở rộng X3). Email OTP và quên mật khẩu **trong phạm vi** (identity gửi qua SMTP; dev dùng Gmail App Password, C27 2026-11-28).
 - Hồ sơ người thuê: cắt 2026-11-12, ghi hạn chế ở báo cáo cuối kỳ.
 - Một tài khoản nhiều vai trò: mỗi tài khoản một vai trò (B9).
 - Đổi vai trò của tài khoản đã có, kể cả quản trị viên đổi (bỏ 2026-11-18, lệch Báo cáo v2 FR08): vai trò cố định từ lúc tạo; muốn vai trò khác thì đăng ký bằng email khác.

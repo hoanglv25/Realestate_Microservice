@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { startIdentityInfra } from './helpers/identity-infra';
 import type { IdentityInfra } from './helpers/identity-infra';
-import { expectNoMail, otpOf, resetTokenOf, waitForMails } from './helpers/mailpit';
+import { expectNoMail, otpOf, resetTokenOf, waitForMails } from './helpers/mail-capture';
 
 /**
- * Quên mật khẩu, đặt lại mật khẩu: test 18, 19 của `Component_Class_Design §5`, với Postgres + Redis +
- * Mailpit THẬT.
+ * Quên mật khẩu, đặt lại mật khẩu: test 18, 19 của `Component_Class_Design §5`, với Postgres + Redis THẬT;
+ * email bắt bằng transport giả (`helpers/mail-capture.ts`, C27).
  */
 describe('Quên và đặt lại mật khẩu với hạ tầng thật', () => {
   let x: IdentityInfra;

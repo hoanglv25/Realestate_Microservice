@@ -4,7 +4,7 @@
 |---|---|
 | **Service** | `services/identity/src/identity/` |
 | **Quy ước** | `standards/coding-convention.md`, `standards/security-policy.md` |
-| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-20 — v2.4 |
+| **Chủ sở hữu / Cập nhật / Phiên bản** | hoang.lv — 2026-11-28 — v2.5 |
 
 ## 1. Cấu trúc
 
@@ -119,7 +119,7 @@ identity:pwreset:<sha256(token)> userId                       TTL PASSWORD_RESET
 
 OTP băm bằng SHA-256 kèm `userId` trước khi lưu; so sánh hằng thời gian. Mỗi lần kiểm tăng `attempts` bằng `HINCRBY` (nguyên tử) **trước** khi so, nên hai request song song không né được giới hạn `OTP_MAX_ATTEMPTS`.
 
-**Gửi email không chờ (chốt 2026-11-20, v2.3):** `register`, `resend-otp`, `forgot-password` gọi `MailService` mà không `await`, kèm `.catch` ghi log `warn` (không kèm OTP, token, link, địa chỉ nhận). SMTP và Redis lỗi sau commit không đổi kết quả trả client. Timeout SMTP 5 giây (kết nối, chào, socket). Mailpit: test hạ tầng đợi email bằng cách hỏi lại vài lần.
+**Gửi email không chờ (chốt 2026-11-20, v2.3):** `register`, `resend-otp`, `forgot-password` gọi `MailService` mà không `await`, kèm `.catch` ghi log `warn` (không kèm OTP, token, link, địa chỉ nhận). SMTP và Redis lỗi sau commit không đổi kết quả trả client. Timeout SMTP 5 giây (kết nối, chào, socket). Test hạ tầng ghi nhận email bằng transport giả trong bộ nhớ và đợi bằng cách hỏi lại vài lần (v2.5).
 
 **Cooldown gửi lại:** theo `userId` (v2.3 giữ như cũ); đề xuất chuyển sang `lower(email)` ở `van-de-can-quyet-dinh.md` C21, chưa sửa.
 
@@ -151,7 +151,7 @@ OTP băm bằng SHA-256 kèm `userId` trước khi lưu; so sánh hằng thời 
 | 12 | Seed chạy hai lần | Không đổi gì | Có (`seed-admin.infra-spec.ts`) |
 | 12a | `seed:users`: lần đầu, chạy lại, có sẵn một phần, 5 lần đồng thời, email hoặc id trùng dòng khác | Tạo 8 và 8 event khớp contract; lần hai `created 0`; chỉ tạo phần thiếu; tổng `created` đúng 8; lỗi nêu rõ, hoàn tác, không sửa dòng của người khác | Mới (T2.4, `seed-users.spec.ts`, `seed-users.infra-spec.ts`) |
 | 12b | `seed:admin`, `seed:users` ghi `status`, `email_verified_at` (tech-debt #16) | Tài khoản seed `ACTIVE`, `email_verified_at` có giá trị; chạy lại không đổi | Mới (T2.5, `seed-admin.infra-spec.ts`, `seed-users.infra-spec.ts`) |
-| 13 | Đăng ký mới | `status = PENDING_VERIFICATION`, Mailpit nhận một email OTP (test hỏi lại vài lần, vì gửi không chờ) | Mới |
+| 13 | Đăng ký mới | `status = PENDING_VERIFICATION`, transport gửi thư nhận đúng một email OTP (test hạ tầng thay `MAIL_TRANSPORT` bằng bản ghi nhận trong bộ nhớ, hỏi lại vài lần vì gửi không chờ; v2.5) | Mới |
 | 14 | Đăng nhập khi chưa xác minh / bị khóa (đúng mật khẩu) | `403 IDENTITY_EMAIL_NOT_VERIFIED` / `403 IDENTITY_ACCOUNT_LOCKED`; sai mật khẩu vẫn `401` | Mới |
 | 15 | OTP đúng | `ACTIVE`, trả cặp token | Mới |
 | 16 | OTP sai 5 lần | Lần 5 xóa mã; mã đúng sau đó vẫn `400` | Mới |

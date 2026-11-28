@@ -14,7 +14,7 @@
 | A, B, C | Ba thành viên: A Lưu Việt Hoàng, B Đỗ Trung Thành, C Đỗ Trung Thông (`implementation/README.md §2`) |
 | hoang.lv | Lưu Việt Hoàng (A), chủ sở hữu tài liệu trong `project-knowledge/` |
 | OTP | One-Time Password, mã xác minh dùng một lần |
-| SMTP | Giao thức gửi email; khi dev dùng Mailpit |
+| SMTP | Giao thức gửi email; dev gửi thật qua Gmail App Password (C27) |
 | BĐS | Bất động sản: nhà, căn hộ, phòng do chủ trọ đăng |
 | payOS | Cổng thanh toán: tạo link, VietQR, gửi webhook |
 | DLQ | Dead letter queue, hàng đợi chứa thông điệp xử lý thất bại |

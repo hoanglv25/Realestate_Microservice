@@ -47,7 +47,7 @@ export interface EnvVars {
   REFRESH_TOKEN_REDIS_PREFIX: string;
   /** identity-service: khóa AES-256-GCM mã hóa số tài khoản nhận tiền, base64 của đúng 32 byte. */
   BANK_ACCOUNT_ENCRYPTION_KEY?: string;
-  // identity-service: gửi email OTP, đặt lại mật khẩu (SMTP; dev dùng Mailpit)
+  // identity-service: gửi email OTP, đặt lại mật khẩu (SMTP; dev dùng Gmail App Password, C27)
   SMTP_HOST?: string;
   SMTP_PORT: number;
   SMTP_USER?: string;
@@ -101,7 +101,7 @@ export const envSchema = Joi.object<EnvVars>({
 
   // --- identity: SMTP, OTP, đặt lại mật khẩu, Google (API_Spec RE.IDENTITY §5) ---
   SMTP_HOST: optionalString,
-  SMTP_PORT: Joi.number().integer().min(1).max(65535).default(1025),
+  SMTP_PORT: Joi.number().integer().min(1).max(65535).default(587),
   SMTP_USER: optionalString,
   SMTP_PASSWORD: optionalString,
   MAIL_FROM: optionalString,

@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { expectEventMatchesContract } from './helpers/contracts';
 import { startIdentityInfra } from './helpers/identity-infra';
 import type { IdentityInfra } from './helpers/identity-infra';
-import { expectNoMail, otpOf, waitForMails } from './helpers/mailpit';
+import { expectNoMail, otpOf, waitForMails } from './helpers/mail-capture';
 
 /**
  * Đăng ký, xác minh email OTP, đăng nhập theo trạng thái: test 13–17 của `Component_Class_Design §5`,
- * với Postgres + Redis + RabbitMQ + Mailpit THẬT. Email gửi KHÔNG chờ nên test hỏi lại Mailpit vài lần.
+ * với Postgres + Redis + RabbitMQ THẬT; email bắt bằng transport giả (`helpers/mail-capture.ts`, C27).
+ * Email gửi KHÔNG chờ nên test hỏi lại vài lần.
  */
 describe('Xác minh email OTP với hạ tầng thật', () => {
   let x: IdentityInfra;
@@ -38,7 +39,7 @@ describe('Xác minh email OTP với hạ tầng thật', () => {
   });
 
   describe('test 13: đăng ký', () => {
-    it('201, status PENDING_VERIFICATION, phone lưu; Mailpit nhận ĐÚNG MỘT email OTP từ MAIL_FROM', async () => {
+    it('201, status PENDING_VERIFICATION, phone lưu; transport nhận ĐÚNG MỘT email OTP từ MAIL_FROM', async () => {
       const b = body({ phone: '0912345678' });
       const res = await register(b);
 

@@ -32,7 +32,7 @@ const escapeHtml = (value: string): string =>
 const minutes = (seconds: number): string => `${Math.max(1, Math.round(seconds / 60))} phút`;
 
 /**
- * Gửi email qua SMTP (Mailpit khi dev).
+ * Gửi email qua SMTP (cấu hình ở `.env`; dev dùng Gmail App Password).
  *
  * KHÔNG CHỜ (`API_Spec §1.1`, chốt 2026-11-20): `sendOtp`, `sendPasswordReset` trả về ngay, việc gửi chạy nền.
  * Lỗi chỉ ghi log `warn` và không bao giờ ném ra cho người gọi, nên kết quả `201`/`202` không phụ thuộc SMTP
